@@ -3,6 +3,10 @@
  * y consejero IA financiero. Persistencia en localStorage.
  */
 import { generateUUID } from '@/lib/safe-utils';
+import {
+  UMBRAL_FAMILIA_PCT_VENTAS,
+  personaFamiliaDeGasto,
+} from '@/lib/familia-duenos';
 import type { CompromisoFijo, VentaDiaria, GastoCategoria } from '@/types';
 
 const KEY_COMPROMISOS = 'dp_compromisos_fijos';
@@ -514,11 +518,23 @@ export function generarConsejo(params: {
   // ── Salarios del dueño
   const salarios = params.compromisos.filter(c => c.activo && c.esPropietario);
   if (salarios.length === 0) {
-    puntos.push(`👤 No tienes registrado tu salario ni el de tu esposa como compromiso fijo. Agrégalos para que la proyección sea precisa.`);
+    puntos.push(`👤 No tienes registrado salarios de dueños/familia como compromiso fijo. Agrégalos (Emiliano, Isabela, Gonzalo Iván, Andrea Cadena, Santiago, Andrea Rosales) para que la proyección sea precisa.`);
     if (nivel === 'ok') nivel = 'alerta';
   } else {
     const totalSal = salarios.reduce((s, c) => s + c.monto, 0);
-    puntos.push(`👥 Salarios de propietarios registrados: $${totalSal.toLocaleString('es-CO')} por quincena.`);
+    puntos.push(`👥 Salarios de propietarios registrados: $${totalSal.toLocaleString('es-CO')} en compromisos del periodo.`);
+  }
+
+  // ── Retiros Familia (categoría dedicada)
+  const gastosFamilia = gastosMes.filter(g => g.categoria === 'Familia');
+  const totalFamilia = gastosFamilia.reduce((s, g) => s + (Number(g.monto) || 0), 0);
+  if (ventasTotalMes > 0 && totalFamilia > 0) {
+    const pctFam = (totalFamilia / ventasTotalMes) * 100;
+    puntos.push(`🏠 Retiros Familia este mes: $${totalFamilia.toLocaleString('es-CO')} (${pctFam.toFixed(0)}% de ventas).`);
+    if (pctFam > UMBRAL_FAMILIA_PCT_VENTAS) {
+      nivel = nivel === 'critico' ? 'critico' : 'alerta';
+      puntos.push(`⚠️ Familia supera el ${UMBRAL_FAMILIA_PCT_VENTAS}% de las ventas — prioriza nómina de trabajadores, servicios y proveedores antes de más retiros.`);
+    }
   }
 
   const titulo = nivel === 'critico'
@@ -528,6 +544,219 @@ export function generarConsejo(params: {
     : '🟢 Las finanzas están en orden';
 
   return { titulo, nivel, puntos };
+}
+
+// ── Panorama Supervivencia (nómina / servicios / proveedores / familia) ──
+
+export type NivelSupervivencia = 'ok' | 'alerta' | 'critico';
+
+export interface RankingPersonaFamilia {
+  persona: string;
+  monto: number;
+}
+
+export interface ColaPagoSupervivencia {
+  id: 'nomina' | 'servicios' | 'proveedores' | 'familia';
+  label: string;
+  comprometido: number;
+  pagado: number;
+  falta: number;
+}
+
+export interface PanoramaSupervivencia {
+  nivel: NivelSupervivencia;
+  ventasPeriodo: number;
+  totalFamilia: number;
+  pctFamiliaSobreVentas: number;
+  rankingFamilia: RankingPersonaFamilia[];
+  cola: ColaPagoSupervivencia[];
+  proyeccionAlcanza: boolean;
+  proyeccionDeficit: number;
+  mensaje: string;
+  /** Texto listo para enviar al agente IA */
+  contextoAgente: string;
+}
+
+/**
+ * Resume si la quincena/periodo alcanza para trabajadores, servicios, proveedores
+ * y cuánta plata salió a la familia.
+ */
+export function calcularPanoramaSupervivencia(params: {
+  ventas: { fecha: string; total: number; metodoPago?: string }[];
+  ventasDiarias: VentaDiaria[];
+  gastos: {
+    fecha: string;
+    monto: number;
+    categoria: GastoCategoria | string;
+    descripcion?: string;
+    personaFamilia?: string;
+    metadata?: { personaFamilia?: string; [k: string]: unknown };
+    estado?: string;
+    proveedorId?: string;
+  }[];
+  compromisos: CompromisoFijo[];
+  /** Suma salarios base de trabajadoras activas (mes) — se toma mitad por quincena */
+  nominaMesEstimada?: number;
+  periodo?: { inicioStr: string; finStr: string; quincena: '1' | '2' | 'mes' };
+  umbralFamiliaPct?: number;
+}): PanoramaSupervivencia {
+  const umbral = params.umbralFamiliaPct ?? UMBRAL_FAMILIA_PCT_VENTAS;
+  const proy = calcularProyeccionQuincena({
+    ventas: params.ventas,
+    ventasDiarias: params.ventasDiarias,
+    gastos: params.gastos.map(g => ({
+      fecha: g.fecha,
+      monto: g.monto,
+      categoria: (g.categoria as GastoCategoria) || 'Otros',
+    })),
+    compromisos: params.compromisos,
+    periodo: params.periodo,
+  });
+
+  const hoy = new Date();
+  let inicio: string;
+  let fin: string;
+  let q: '1' | '2' | 'mes';
+  if (params.periodo?.inicioStr && params.periodo?.finStr) {
+    inicio = params.periodo.inicioStr;
+    fin = params.periodo.finStr;
+    q = params.periodo.quincena;
+  } else {
+    const dia = hoy.getDate();
+    const i = dia <= 15
+      ? new Date(hoy.getFullYear(), hoy.getMonth(), 1)
+      : new Date(hoy.getFullYear(), hoy.getMonth(), 16);
+    const f = dia <= 15
+      ? new Date(hoy.getFullYear(), hoy.getMonth(), 15)
+      : new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+    inicio = toLocalYMD(i);
+    fin = toLocalYMD(f);
+    q = dia <= 15 ? '1' : '2';
+  }
+
+  const enPeriodo = <T extends { fecha: string }>(arr: T[]) =>
+    arr.filter(x => (x.fecha || '').slice(0, 10) >= inicio && (x.fecha || '').slice(0, 10) <= fin);
+
+  const gastosP = enPeriodo(params.gastos).filter(g => g.estado !== 'anulado');
+  const ventasPOS = enPeriodo(params.ventas).reduce((s, v) => s + (Number(v.total) || 0), 0);
+  const fechasPOS = new Set(enPeriodo(params.ventas).map(v => v.fecha.slice(0, 10)));
+  const ventasMan = enPeriodo(params.ventasDiarias)
+    .filter(v => !fechasPOS.has(v.fecha))
+    .reduce((s, v) => s + (Number(v.total) || 0), 0);
+  const ventasPeriodo = ventasPOS + ventasMan;
+
+  const sumCat = (cats: string[]) =>
+    gastosP
+      .filter(g => cats.includes(String(g.categoria || '')))
+      .reduce((s, g) => s + (Number(g.monto) || 0), 0);
+
+  const pagadoNomina = sumCat(['Nómina']);
+  const pagadoServicios = sumCat(['Servicios', 'Arriendo']);
+  const pagadoProveedores = gastosP
+    .filter(g => g.categoria === 'Materia Prima' || !!g.proveedorId)
+    .reduce((s, g) => s + (Number(g.monto) || 0), 0);
+  const pagadoFamilia = sumCat(['Familia']);
+
+  const fijos = params.compromisos.filter(c => c.activo && !esCompromisoYaEnNomina(c));
+  const fijosServ = fijos
+    .filter(c => !c.esPropietario && (c.categoria === 'Servicios' || c.categoria === 'Arriendo'))
+    .filter(c => {
+      if (q === 'mes') return true;
+      if (c.frecuencia === 'quincenal') return true;
+      if (c.frecuencia === 'solo_q1') return q === '1';
+      if (c.frecuencia === 'solo_q2') return q === '2';
+      const d = Number(c.diaDeCobro) || 1;
+      return q === '1' ? d <= 15 : d >= 16;
+    })
+    .reduce((s, c) => s + (Number(c.monto) || 0), 0);
+
+  const nominaMes = Number(params.nominaMesEstimada) || 0;
+  const nominaQ = q === 'mes' ? nominaMes : nominaMes / 2;
+
+  const cola: ColaPagoSupervivencia[] = [
+    {
+      id: 'nomina',
+      label: 'Nómina trabajadores',
+      comprometido: Math.round(nominaQ),
+      pagado: Math.round(pagadoNomina),
+      falta: Math.max(0, Math.round(nominaQ - pagadoNomina)),
+    },
+    {
+      id: 'servicios',
+      label: 'Servicios y arriendo',
+      comprometido: Math.round(fijosServ),
+      pagado: Math.round(pagadoServicios),
+      falta: Math.max(0, Math.round(fijosServ - pagadoServicios)),
+    },
+    {
+      id: 'proveedores',
+      label: 'Proveedores (materia prima)',
+      comprometido: Math.round(pagadoProveedores), // ya pagado = referencia; falta 0 si no hay tope
+      pagado: Math.round(pagadoProveedores),
+      falta: 0,
+    },
+    {
+      id: 'familia',
+      label: 'Familia / dueños',
+      comprometido: Math.round(pagadoFamilia + proy.totalSalarios),
+      pagado: Math.round(pagadoFamilia),
+      falta: 0,
+    },
+  ];
+
+  const porPersona = new Map<string, number>();
+  for (const g of gastosP.filter(x => x.categoria === 'Familia')) {
+    const quien = personaFamiliaDeGasto(g) || 'Sin asignar';
+    porPersona.set(quien, (porPersona.get(quien) || 0) + (Number(g.monto) || 0));
+  }
+  const rankingFamilia = [...porPersona.entries()]
+    .map(([persona, monto]) => ({ persona, monto: Math.round(monto) }))
+    .sort((a, b) => b.monto - a.monto);
+
+  const pctFamilia = ventasPeriodo > 0 ? (pagadoFamilia / ventasPeriodo) * 100 : 0;
+  const faltaCritica = cola[0].falta + cola[1].falta;
+
+  let nivel: NivelSupervivencia = 'ok';
+  if (!proy.alcanza || faltaCritica > 0) {
+    nivel = proy.deficit > 200000 || cola[0].falta > 0 ? 'critico' : 'alerta';
+  } else if (pctFamilia > umbral) {
+    nivel = 'alerta';
+  }
+
+  const mensaje =
+    nivel === 'critico'
+      ? 'No alcanza con claridad para nómina y/o servicios. Congela retiros de familia hasta cubrir lo esencial.'
+      : nivel === 'alerta'
+        ? 'Hay tensión de caja o la familia se está llevando demasiado frente a las ventas. Revisa la cola de pagos.'
+        : 'La proyección cubre lo esencial. Sigue etiquetando cada retiro de familia.';
+
+  const contextoAgente = [
+    `PERIODO ${inicio} → ${fin} (quincena=${q})`,
+    `Ventas periodo: $${Math.round(ventasPeriodo).toLocaleString('es-CO')}`,
+    `Proyección alcanza: ${proy.alcanza ? 'SÍ' : 'NO'} · déficit $${proy.deficit.toLocaleString('es-CO')} · saldo proyectado $${proy.saldoProyectado.toLocaleString('es-CO')}`,
+    `Nómina trabajadores (estimado periodo): $${Math.round(nominaQ).toLocaleString('es-CO')} · pagado $${Math.round(pagadoNomina).toLocaleString('es-CO')} · falta $${cola[0].falta.toLocaleString('es-CO')}`,
+    `Servicios/arriendo comprometidos: $${Math.round(fijosServ).toLocaleString('es-CO')} · pagado $${Math.round(pagadoServicios).toLocaleString('es-CO')} · falta $${cola[1].falta.toLocaleString('es-CO')}`,
+    `Proveedores (materia prima pagada): $${Math.round(pagadoProveedores).toLocaleString('es-CO')}`,
+    `Familia (categoría): $${Math.round(pagadoFamilia).toLocaleString('es-CO')} (${pctFamilia.toFixed(1)}% de ventas; umbral ${umbral}%)`,
+    rankingFamilia.length
+      ? `Ranking familia: ${rankingFamilia.map(r => `${r.persona}=$${r.monto.toLocaleString('es-CO')}`).join(', ')}`
+      : 'Ranking familia: sin gastos Familia etiquetados aún',
+    `Salarios propietarios en compromisos: $${proy.totalSalarios.toLocaleString('es-CO')}`,
+    `Nivel supervivencia: ${nivel}`,
+  ].join('\n');
+
+  return {
+    nivel,
+    ventasPeriodo: Math.round(ventasPeriodo),
+    totalFamilia: Math.round(pagadoFamilia),
+    pctFamiliaSobreVentas: Math.round(pctFamilia * 10) / 10,
+    rankingFamilia,
+    cola,
+    proyeccionAlcanza: proy.alcanza,
+    proyeccionDeficit: proy.deficit,
+    mensaje,
+    contextoAgente,
+  };
 }
 
 // ── Registro de Producción Diaria ────────────────────────────

@@ -65,8 +65,25 @@ export class IndexedDBAdapter implements DatabaseAdapter {
   /** Abre (o crea) la base de datos y registra todos los Object Stores. Idempotente. */
   async init(): Promise<void> {
     if (this.initPromise) return this.initPromise;
-    this.initPromise = new Promise((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, DB_VERSION);
+    this.initPromise = this.abrir(DB_VERSION).catch((error: any) => {
+      // Si el navegador YA tiene una versión MÁS NUEVA de la base (pasa cuando se
+      // publica por error una copia vieja de la app), IndexedDB lanza VersionError
+      // y la app se quedaba en pantalla de "Error Crítico de Inicio".
+      // Aquí abrimos la versión que ya existe en vez de dejar la app inservible.
+      const nombre = error?.name || '';
+      if (nombre === 'VersionError') {
+        console.warn('⚠️ [IndexedDB]: la base local es más nueva que este código. Se abre la versión existente.');
+        return this.abrir(undefined);
+      }
+      throw error;
+    });
+    return this.initPromise;
+  }
+
+  /** Abre la base con una versión concreta (o la existente si no se indica). */
+  private abrir(version?: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const request = version == null ? indexedDB.open(DB_NAME) : indexedDB.open(DB_NAME, version);
 
       request.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result;
@@ -83,13 +100,16 @@ export class IndexedDBAdapter implements DatabaseAdapter {
         resolve();
       };
 
+      request.onblocked = () => {
+        console.warn('⚠️ [IndexedDB]: la base está abierta en otra pestaña; se espera a que se cierre.');
+      };
+
       request.onerror = (event) => {
         const error = (event.target as IDBOpenDBRequest).error;
         console.error('❌ [IndexedDB]: Error al abrir la DB:', error);
         reject(error);
       };
     });
-    return this.initPromise;
   }
 
   /** Garantiza que init() haya completado antes de operar. */

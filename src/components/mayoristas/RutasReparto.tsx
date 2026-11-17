@@ -554,9 +554,11 @@ function NuevoDespacho({ rutas, catalogo, trabajadores, despachos, onCerrar, onC
 
     const resultados = useMemo(() => {
         const q = busca.trim().toLowerCase();
-        if (!q) return [];
+        // Sin escribir nada se ve todo el catálogo ordenado por categoría (antes salía vacío)
+        const orden = (x: CatalogoLinea, y: CatalogoLinea) => (x.categoria || '').localeCompare(y.categoria || '') || x.nombre.localeCompare(y.nombre);
+        if (!q) return [...catalogo].sort(orden);
         // Incluye ya cargados para poder deseleccionar/quitar desde la lista
-        return catalogo.filter(c => c.nombre.toLowerCase().includes(q)).slice(0, 8);
+        return catalogo.filter(c => c.nombre.toLowerCase().includes(q) || (c.categoria || '').toLowerCase().includes(q)).sort(orden).slice(0, 60);
     }, [busca, catalogo]);
 
     const sugerir = () => {
@@ -664,7 +666,7 @@ function NuevoDespacho({ rutas, catalogo, trabajadores, despachos, onCerrar, onC
                             )}
                         />
                         {resultados.length > 0 && (
-                            <div className="absolute z-20 left-0 right-0 mt-1 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-lg max-h-56 overflow-y-auto">
+                            <div className="mt-1 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-sm max-h-64 overflow-y-auto">
                                 {resultados.map(c => {
                                     const ya = carga.some(l => l.productoId === c.productoId);
                                     return (
@@ -679,7 +681,7 @@ function NuevoDespacho({ rutas, catalogo, trabajadores, despachos, onCerrar, onC
                                             onClick={() => agregarACarga(c)}
                                         >
                                             <span className="min-w-0">
-                                                <span className="block truncate">{c.nombre}</span>
+                                                <span className="block truncate">{c.nombre}{c.categoria ? <span className="text-[10px] font-bold text-slate-500"> · {c.categoria}</span> : null}</span>
                                                 <span className="block text-[11px] font-bold text-slate-600 dark:text-slate-400">
                                                     Costo {Math.round(c.costo).toLocaleString('es-CO')} · Mayoreo {Math.round(c.precioMayorista).toLocaleString('es-CO')}
                                                     {ya ? ' · toca otra vez para quitar' : ''}

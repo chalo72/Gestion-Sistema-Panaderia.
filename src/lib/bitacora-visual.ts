@@ -13,7 +13,37 @@ export type CategoriaBitacora =
   | 'consumo_no_registrado'
   | 'producto_regalado'
   | 'devolucion_simulada'
-  | 'incumplimiento';
+  | 'incumplimiento'
+  | 'plata_bolsillo'
+  | 'plata_delantal'
+  | 'bolsos_bajo_caja'
+  | 'escondite_gaveta'
+  | 'billete_arrugado'
+  | 'plata_manga_ropa'
+  | 'fajo_fuera_caja'
+  | 'cambio_falso'
+  | 'bodega_gaseosa'
+  | 'gaveta_sin_cliente'
+  | 'mano_zona_privada'
+  | 'entrega_tercero'
+  | 'trapo_servilleta'
+  | 'gaveta_abierta'
+  | 'tapa_gaveta'
+  | 'salida_con_bulto'
+  | 'basura_sospechosa'
+  | 'dos_en_gaveta'
+  | 'visita_mostrador'
+  | 'helado_sin_cobro'
+  | 'helado_extra'
+  | 'helado_personal'
+  | 'helado_regalo'
+  | 'topping_sin_cobro'
+  | 'nevera_helado_abierta'
+  | 'pan_se_come'
+  | 'pan_se_lleva'
+  | 'masa_bolsillo'
+  | 'bandeja_oculta'
+  | 'puerta_trasera';
 
 export type ClasificacionBitacora = 'bueno' | 'regular' | 'malo' | 'por_mejorar';
 
@@ -34,6 +64,23 @@ export interface ClipBitacora {
 }
 
 const BUCKET = 'bitacora-visual';
+
+/**
+ * Bandejas forenses (orden de gravedad ↑):
+ * 1) sospechoso — indicios
+ * 2) evidencia — irregularidad comprobada (antes “revisión”)
+ * 3) cuarentena — urgente / grave (auditor forense)
+ */
+export type BandejaForense = 'sospechoso' | 'evidencia' | 'cuarentena';
+
+/** Alias legacy: archivos viejos en revision/ se leen como evidencia. */
+export type BandejaForenseLegacy = BandejaForense | 'revision';
+
+export const BANDEJAS_FORENSES: { id: BandejaForense; label: string; hint: string }[] = [
+  { id: 'sospechoso', label: 'Sospechoso', hint: 'Indicios' },
+  { id: 'evidencia', label: 'Evidencia', hint: 'Comprobada' },
+  { id: 'cuarentena', label: 'Cuarentena', hint: 'Urgente' },
+];
 
 /** Nombre seguro para carpeta o archivo en la nube. */
 export function nombreCarpetaNube(texto: string): string {
@@ -77,9 +124,11 @@ export async function archivarClipEnCarpetas(
  * a propósito, porque son videos de los trabajadores).
  */
 export async function subirClipBitacora(blob: Blob, camaraId: string): Promise<string> {
-  const ruta = `${camaraId}/${new Date().toISOString().replace(/[:.]/g, '-')}.webm`;
+  const esJpg = (blob.type || '').includes('jpeg') || (blob.type || '').includes('jpg');
+  const ext = esJpg ? 'jpg' : 'webm';
+  const ruta = `${camaraId}/${new Date().toISOString().replace(/[:.]/g, '-')}.${ext}`;
   const { error } = await supabase.storage.from(BUCKET).upload(ruta, blob, {
-    contentType: blob.type || 'video/webm',
+    contentType: esJpg ? 'image/jpeg' : 'video/webm',
     upsert: false,
   });
   if (error) throw error;
@@ -158,6 +207,236 @@ export async function clipsRecientes(limite = 40): Promise<ClipBitacora[]> {
     .limit(limite);
   if (error) throw error;
   return (data || []) as ClipBitacora[];
+}
+
+/** Clips que la IA marcó como posible problema (alerta, malo, regular o por mejorar). 2026-10-20 */
+export async function clipsEnRevision(limite = 60): Promise<ClipBitacora[]> {
+  const { data, error } = await supabase
+    .from('bitacora_visual')
+    .select('*')
+    .or('alerta.eq.true,clasificacion.in.(malo,regular,por_mejorar)')
+    .order('capturado_en', { ascending: false })
+    .limit(limite);
+  if (error) throw error;
+  return (data || []) as ClipBitacora[];
+}
+
+/** Título corto para el archivo en nube (fecha · cámara · categoría · gesto). */
+export function tituloHallazgoForense(opts: {
+  camara?: string;
+  categorias?: string[];
+  clasificacion?: string | null;
+  descripcion?: string;
+  cuando?: Date;
+  /** Título ya redactado por la IA (línea REPORTE:). */
+  reporteIa?: string | null;
+}): string {
+  if (opts.reporteIa?.trim()) {
+    return opts.reporteIa.trim().slice(0, 140);
+  }
+  const cam = (opts.camara || 'camara').slice(0, 28);
+  const cats = (opts.categorias || []).filter(Boolean).slice(0, 2).join('+');
+  const clase = opts.clasificacion || '';
+  const etiqueta = cats || clase || 'irregularidad';
+  const cuando = opts.cuando || new Date();
+  const fecha = cuando.toLocaleString('es-CO', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+  const desc = (opts.descripcion || '')
+    .replace(/\s+/g, ' ')
+    .replace(/SIN_ANOMALIA/gi, '')
+    .trim()
+    .slice(0, 70);
+  return desc ? `${fecha} · ${cam} · ${etiqueta} · ${desc}` : `${fecha} · ${cam} · ${etiqueta}`;
+}
+
+/**
+ * Copia un clip ya existente (por ruta en el bucket) a bandeja forense:
+ * sospechoso/ | evidencia/ | cuarentena/
+ */
+export async function archivarClipEnBandejaForense(
+  rutaOrigen: string,
+  bandeja: BandejaForense,
+  datos: { camara?: string; descripcion?: string; cuando?: Date; titulo?: string }
+): Promise<string | null> {
+  try {
+    const { data: archivo, error: errDl } = await supabase.storage.from(BUCKET).download(rutaOrigen);
+    if (errDl || !archivo) return null;
+    const cuando = datos.cuando || new Date();
+    const fecha = cuando.toISOString().slice(0, 10);
+    const hora = cuando.toISOString().slice(11, 19).replace(/:/g, '');
+    const cam = nombreCarpetaNube(datos.camara || 'camara');
+    const desc = nombreCarpetaNube(datos.titulo || datos.descripcion || 'anomalia').slice(0, 60);
+    const ruta = `${bandeja}/${fecha}/${fecha}_${hora}_${cam}_${desc}.webm`;
+    const subida = await supabase.storage.from(BUCKET).upload(ruta, archivo, {
+      contentType: archivo.type || 'video/webm',
+      upsert: false,
+    });
+    if (subida.error) return null;
+    return ruta;
+  } catch {
+    return null;
+  }
+}
+
+/** Sube un JPEG/WebM nuevo directo a bandeja forense (escaneo DVR). */
+export async function archivarBlobEnBandejaForense(
+  blob: Blob,
+  bandeja: BandejaForense,
+  datos: { camara?: string; descripcion?: string; cuando?: Date; titulo?: string }
+): Promise<string | null> {
+  try {
+    const cuando = datos.cuando || new Date();
+    const fecha = cuando.toISOString().slice(0, 10);
+    const hora = cuando.toISOString().slice(11, 19).replace(/:/g, '');
+    const cam = nombreCarpetaNube(datos.camara || 'camara');
+    const desc = nombreCarpetaNube(datos.titulo || datos.descripcion || 'anomalia').slice(0, 60);
+    const ext = (blob.type || '').includes('jpeg') || (blob.type || '').includes('jpg') ? 'jpg' : 'webm';
+    const ruta = `${bandeja}/${fecha}/${fecha}_${hora}_${cam}_${desc}.${ext}`;
+    const subida = await supabase.storage.from(BUCKET).upload(ruta, blob, {
+      contentType: blob.type || (ext === 'jpg' ? 'image/jpeg' : 'video/webm'),
+      upsert: false,
+    });
+    if (subida.error) return null;
+    return ruta;
+  } catch {
+    return null;
+  }
+}
+
+/** dataURL → Blob (para archivar frames del DVR). */
+export function dataUrlABlob(dataUrl: string): Blob | null {
+  try {
+    const m = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+    if (!m) return null;
+    const bin = atob(m[2]);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], { type: m[1] || 'image/jpeg' });
+  } catch {
+    return null;
+  }
+}
+
+/** Elige bandeja según gravedad del análisis. */
+export function bandejaDesdeAnalisis(opts: {
+  alerta: boolean;
+  clasificacion: ClasificacionBitacora | null;
+  categorias: string[];
+  descripcion?: string;
+}): BandejaForense | null {
+  const desc = (opts.descripcion || '').toLowerCase();
+  if (/sin_anomalia|sin_imagen|no pude ver/.test(desc)) return null;
+  const cats = opts.categorias.map((c) => c.toLowerCase());
+  const grave =
+    cats.includes('robo') ||
+    cats.includes('devolucion_simulada') ||
+    cats.includes('plata_bolsillo') ||
+    cats.includes('plata_delantal') ||
+    cats.includes('bolsos_bajo_caja') ||
+    cats.includes('escondite_gaveta') ||
+    cats.includes('billete_arrugado') ||
+    cats.includes('plata_manga_ropa') ||
+    cats.includes('fajo_fuera_caja') ||
+    cats.includes('mano_zona_privada') ||
+    cats.includes('entrega_tercero') ||
+    cats.includes('trapo_servilleta') ||
+    cats.includes('tapa_gaveta') ||
+    cats.includes('salida_con_bulto') ||
+    cats.includes('basura_sospechosa') ||
+    cats.includes('dos_en_gaveta') ||
+    cats.includes('helado_sin_cobro') ||
+    cats.includes('helado_extra') ||
+    cats.includes('helado_personal') ||
+    cats.includes('helado_regalo') ||
+    cats.includes('topping_sin_cobro') ||
+    cats.includes('pan_se_come') ||
+    cats.includes('pan_se_lleva') ||
+    cats.includes('masa_bolsillo') ||
+    cats.includes('bandeja_oculta') ||
+    cats.includes('puerta_trasera');
+  // 3) Cuarentena — urgente / grave
+  if (grave || opts.clasificacion === 'malo') return 'cuarentena';
+  // 2) Evidencia comprobada — irregularidad vista (categoría o clase clara)
+  if (
+    cats.length > 0 ||
+    opts.clasificacion === 'regular' ||
+    opts.clasificacion === 'por_mejorar'
+  ) {
+    return 'evidencia';
+  }
+  // 1) Sospechoso — solo indicios (alerta sin categoría firme)
+  if (opts.alerta) return 'sospechoso';
+  return null;
+}
+
+const CATS_GRAVES = new Set([
+  'robo',
+  'devolucion_simulada',
+  'plata_bolsillo',
+  'plata_delantal',
+  'bolsos_bajo_caja',
+  'escondite_gaveta',
+  'billete_arrugado',
+  'plata_manga_ropa',
+  'fajo_fuera_caja',
+  'cambio_falso',
+  'mano_zona_privada',
+  'entrega_tercero',
+  'trapo_servilleta',
+  'tapa_gaveta',
+  'salida_con_bulto',
+  'basura_sospechosa',
+  'dos_en_gaveta',
+  'helado_sin_cobro',
+  'helado_extra',
+  'helado_personal',
+  'helado_regalo',
+  'topping_sin_cobro',
+  'pan_se_come',
+  'pan_se_lleva',
+  'masa_bolsillo',
+  'bandeja_oculta',
+  'puerta_trasera',
+]);
+
+/** Lista clips de bitácora filtrados como si fueran las 3 carpetas (para la UI). */
+export async function clipsPorCarpetaUI(
+  carpeta: 'todas' | BandejaForense,
+  limite = 60
+): Promise<ClipBitacora[]> {
+  if (carpeta === 'todas') return clipsRecientes(limite);
+  const { data, error } = await supabase
+    .from('bitacora_visual')
+    .select('*')
+    .order('capturado_en', { ascending: false })
+    .limit(Math.max(limite * 3, 120));
+  if (error) throw error;
+  const todos = (data || []) as ClipBitacora[];
+  const filtrados = todos.filter((c) => {
+    const cats = (c.categorias_detectadas || []).map((x) => String(x).toLowerCase());
+    const grave = cats.some((x) => CATS_GRAVES.has(x));
+    if (carpeta === 'cuarentena') return c.clasificacion === 'malo' || grave;
+    if (carpeta === 'sospechoso') {
+      // Solo indicios: alerta sin categoría firme
+      return Boolean(c.alerta) && cats.length === 0 && c.clasificacion !== 'malo' && !grave;
+    }
+    // evidencia comprobada (antes “revisión”)
+    return (
+      !grave &&
+      c.clasificacion !== 'malo' &&
+      (cats.length > 0 ||
+        c.clasificacion === 'regular' ||
+        c.clasificacion === 'por_mejorar')
+    );
+  });
+  return filtrados.slice(0, limite);
 }
 
 /** Búsqueda por texto libre sobre lo que la IA describió (para "busca tal cosa/momento"). */

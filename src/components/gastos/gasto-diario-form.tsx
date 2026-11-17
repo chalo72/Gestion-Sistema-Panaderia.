@@ -7,6 +7,10 @@ import { verificarPinGerente } from '@/lib/security-agent';
 import { CAJAS_POS_DEFAULT } from '@/lib/boveda-pos-sync';
 import { getBovedas, type Boveda } from '@/lib/boveda-store';
 import { db } from '@/lib/database';
+import {
+    detectarPersonaFamiliaEnTexto,
+    opcionesPersonaFamilia,
+} from '@/lib/familia-duenos';
 import type {
     CajaSesion,
     Gasto,
@@ -80,6 +84,8 @@ export interface GastoDiarioFormData {
     bovedaId?: string;
     origenTipo?: OrigenGastoDiario;
     proveedorId?: string;
+    /** Obligatorio si categoria === Familia */
+    personaFamilia?: string;
     
     // Campos para gasto simple individual (legacy o para gastos sin ítems como servicios)
     productoId?: string;
@@ -121,6 +127,7 @@ const CATS: GastoCategoria[] = [
     'Nómina',
     'Arriendo',
     'Mantenimiento',
+    'Familia',
     'Otros',
 ];
 
@@ -254,6 +261,7 @@ export function GastoDiarioForm({
     const [precioUnitario, setPrecioUnitario] = useState('');
     const [nota, setNota] = useState('');
     const [categoria, setCat] = useState<GastoCategoria>('Materia Prima');
+    const [personaFamilia, setPersonaFamilia] = useState('');
     const [origenTipo, setOrigenTipo] = useState<OrigenGastoDiario>('pos');
     const [cajaId, setCajaId] = useState('');
     const [bovedaId, setBovedaId] = useState('');
@@ -700,11 +708,18 @@ export function GastoDiarioForm({
         setTotalFacturaOverride('');
         setEditandoGastoIdCompleto(null);
         setEditandoFacturaItemId(null);
+        setPersonaFamilia('');
     };
 
     const handleEditGastoCompleto = (g: Gasto) => {
         setEditandoGastoIdCompleto(g.id);
         setCat((g.categoria as GastoCategoria) || 'Materia Prima');
+        setPersonaFamilia(
+            g.personaFamilia ||
+            (g.metadata as { personaFamilia?: string } | undefined)?.personaFamilia ||
+            detectarPersonaFamiliaEnTexto(g.descripcion)?.nombre ||
+            ''
+        );
         setOrigenTipo(g.bovedaId ? 'tesoreria' : 'pos');
         setCajaId(g.cajaId || '');
         setBovedaId(g.bovedaId || '');
@@ -769,11 +784,21 @@ export function GastoDiarioForm({
                 }
             }
 
+            const personaResuelta =
+                personaFamilia.trim() ||
+                detectarPersonaFamiliaEnTexto(descripcionGasto)?.nombre ||
+                '';
+            if (categoria === 'Familia' && !personaResuelta) {
+                toast.error('Retiro de familia: elige a quién (Emiliano, Isabela, Gonzalo Iván, etc.).');
+                return;
+            }
+
             setSaving(true);
             const payload = {
                 descripcion: descripcionGasto,
                 monto: montoFinal,
                 categoria,
+                personaFamilia: categoria === 'Familia' ? personaResuelta : undefined,
                 metodoPago: 'efectivo' as const,
                 origenTipo,
                 cajaId: origenTipo === 'pos' ? cajaId || undefined : undefined,
@@ -993,7 +1018,11 @@ export function GastoDiarioForm({
                     <select
                         className={selectCls}
                         value={categoria}
-                        onChange={(e) => setCat(e.target.value as GastoCategoria)}
+                        onChange={(e) => {
+                            const c = e.target.value as GastoCategoria;
+                            setCat(c);
+                            if (c !== 'Familia') setPersonaFamilia('');
+                        }}
                         style={{ width: anchoPorTexto(categoria, 14, 22, 10) }}
                     >
                         {CATS.map((c) => (
@@ -1003,6 +1032,26 @@ export function GastoDiarioForm({
                         ))}
                     </select>
                 </label>
+
+                {categoria === 'Familia' && (
+                    <label className="inline-flex flex-col gap-1.5 shrink-0 min-w-[12rem]">
+                        <span className={cn(fieldLabelCls, 'text-amber-700 dark:text-amber-400')}>
+                            Quién de la familia *
+                        </span>
+                        <select
+                            className={selectCls}
+                            value={personaFamilia}
+                            onChange={(e) => setPersonaFamilia(e.target.value)}
+                        >
+                            <option value="">Elegir…</option>
+                            {opcionesPersonaFamilia().map((o) => (
+                                <option key={o.value} value={o.value}>
+                                    {o.label}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+                )}
             </div>
 
             {/* Fila 3: insumo */}

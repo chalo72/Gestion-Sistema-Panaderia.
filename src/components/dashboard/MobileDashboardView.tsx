@@ -16,7 +16,7 @@ import {
   BarChart3,
   Bell,
   ArrowUpRight,
-  Zap, Users, Warehouse, Receipt, Store,
+  Zap, Users, Warehouse, Receipt, Store, CalendarClock,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -72,6 +72,8 @@ interface MobileDashboardViewProps {
   onViewNomina?: () => void;
   onViewBoveda?: () => void;
   onViewMayoristas?: () => void;
+  /** Abre el panel del Horario de la tienda (lo ven también las vendedoras, solo lectura). */
+  onVerHorario?: () => void;
   productos: Producto[];
   proveedores: Proveedor[];
   precios: PrecioProveedor[];
@@ -107,6 +109,7 @@ export function MobileDashboardView({
   onViewNomina,
   onViewBoveda,
   onViewMayoristas,
+  onVerHorario,
   productos,
   proveedores,
   precios,
@@ -311,6 +314,21 @@ export function MobileDashboardView({
               Pedidos<br/><span className="text-[10px] text-slate-400 font-bold">A proveedor</span>
             </span>
           </button>
+
+          {/* Horario de la tienda — visible para todos, incluidas las vendedoras */}
+          {onVerHorario && (
+            <button
+              onClick={onVerHorario}
+              className="flex items-center gap-3 p-3 rounded-2xl active:scale-95 transition-all group hover:bg-rose-50 dark:hover:bg-rose-950/20 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800"
+            >
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-rose-500 to-pink-600 text-white flex items-center justify-center shrink-0">
+                <CalendarClock className="w-5 h-5" />
+              </div>
+              <span className="text-sm font-black text-slate-800 dark:text-slate-200 tracking-tight text-left leading-tight">
+                Horario<br/><span className="text-[10px] text-slate-400 font-bold">Quién trabaja hoy</span>
+              </span>
+            </button>
+          )}
 
           {onViewMayoristas && (
             <button

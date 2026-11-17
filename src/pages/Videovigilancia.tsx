@@ -22,7 +22,9 @@ import {
   Send,
   BrainCircuit,
   Film,
-  FileText
+  FileText,
+  FolderSearch,
+  HardDrive,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -63,6 +65,9 @@ import {
   promptAnalisisClipOdysseus,
   parsearRespuestaClipOdysseus,
   promptInformeDiarioOdysseus,
+  promptEscaneoAlRegresar,
+  extraerReporteForense,
+  REGLAS_FORENSES_DVR,
   type ReglaOdysseus,
   type TipoCamaraPuente,
 } from '@/lib/odysseus-vigilancia';
@@ -73,11 +78,26 @@ import {
   buscarClipsBitacora,
   urlFirmadaClip,
   clipsDelDia,
-  clipsRecientes,
+  clipsPorCarpetaUI,
   archivarClipEnCarpetas,
+  archivarClipEnBandejaForense,
+  archivarBlobEnBandejaForense,
+  dataUrlABlob,
+  bandejaDesdeAnalisis,
+  tituloHallazgoForense,
+  nombreCarpetaNube,
   type ClipBitacora,
   type CategoriaBitacora,
+  type BandejaForense,
 } from '@/lib/bitacora-visual';
+import {
+  probarConexionDvr,
+  buscarGrabacionesDvr,
+  capturarFrameDvr,
+  muestrearSegmentosDvrForense,
+  instantesForensesEnSegmento,
+  etiquetaPista,
+} from '@/lib/dvr-hikvision';
 
 interface Camara {
   id: string;
@@ -123,14 +143,58 @@ const INTERVALO_GRABACION_MS = 60_000;
 const esUrlHttpLocal = (url: string) =>
   /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/i.test(url);
 
+const esUrlTailscale = (url: string) => {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' && u.hostname.toLowerCase().endsWith('.ts.net');
+  } catch {
+    return false;
+  }
+};
+
 /**
  * 2026-10-09 (AUTORIZO Gonzalo): las cámaras del local son de OTRO origen (http://192.168…), y el navegador
  * NO deja grabar una imagen de otro origen ("lienzo contaminado") → la Bitácora nunca guardó un clip.
  * Cuando la app corre en el PC (ABRIR_DULCE_PLACER_LOCAL), la imagen se pide por /__camara (mismo origen).
+ *
+ * 2026-10-21: localhost/127.0.0.1 + Tailscale (.ts.net) también pasan por /__camara en local.
+ * En Vercel (https) se usa /api/camara.
  */
 const puedeUsarPuenteCamara = (url: string) =>
-  typeof window !== 'undefined' && window.location.protocol === 'http:' && esUrlHttpLocal(url) && !/^http:\/\/(localhost|127\.0\.0\.1)/i.test(url);
-const urlPuenteCamara = (url: string) => `/__camara?u=${encodeURIComponent(url)}`;
+  typeof window !== 'undefined' &&
+  window.location.protocol === 'http:' &&
+  (esUrlHttpLocal(url) || esUrlTailscale(url));
+
+/**
+ * En el PC del local, Tailscale Funnel satura go2rtc al grabar.
+ * Convertimos https://….ts.net/api/… → http://127.0.0.1:1984/api/… (mismo go2rtc, sin salir a internet).
+ */
+const urlGo2rtcLocalSiAplica = (url: string): string => {
+  try {
+    const u = new URL(url);
+    if (!u.hostname.toLowerCase().endsWith('.ts.net')) return url;
+    if (!u.pathname.includes('/api/')) return url;
+    const src = u.searchParams.get('src');
+    const local = new URL('http://127.0.0.1:1984');
+    local.pathname = u.pathname.includes('stream.mjpeg')
+      ? '/api/stream.mjpeg'
+      : u.pathname.includes('frame.jpeg')
+        ? '/api/frame.jpeg'
+        : u.pathname;
+    if (src) local.searchParams.set('src', src);
+    return local.toString();
+  } catch {
+    return url;
+  }
+};
+
+const urlPuenteCamara = (url: string) =>
+  `/__camara?u=${encodeURIComponent(urlGo2rtcLocalSiAplica(url))}`;
+/** Proxy same-origin en Vercel (api/camara.ts) — frames JPEG desde Tailscale/go2rtc. */
+const urlProxyApiCamara = (url: string) => `/api/camara?u=${encodeURIComponent(url)}`;
+/** URL grabable (mismo origen): puente local si aplica, si no proxy API. */
+const urlParaGrabar = (url: string) =>
+  puedeUsarPuenteCamara(url) ? urlPuenteCamara(url) : urlProxyApiCamara(url);
 
 /** Cache-buster para forzar refresco de snapshots estáticos. */
 const conBuster = (url: string) => {
@@ -175,11 +239,46 @@ export function Videovigilancia({ ventas = [], sesionesCaja = [], onIrAuditoria 
   const [camaraPreguntaId, setCamaraPreguntaId] = useState<string>('');
   const [preguntando, setPreguntando] = useState(false);
   const [grabacionActiva, setGrabacionActiva] = useState(false);
+  /** 2026-10-20: último resultado de grabación, visible arriba (antes los errores quedaban escondidos). */
+  const [estadoGrab, setEstadoGrab] = useState<{ texto: string; ok: boolean } | null>(null);
+  const marcarGrab = (camNombre: string, texto: string, ok = false) =>
+    setEstadoGrab({ texto: `${new Date().toLocaleTimeString('es-CO', { hour12: false })} · ${camNombre}: ${texto}`, ok });
   const [busquedaTexto, setBusquedaTexto] = useState('');
   const [buscandoClips, setBuscandoClips] = useState(false);
   const [resultadosBusqueda, setResultadosBusqueda] = useState<ClipBitacora[]>([]);
-  const [videoNube, setVideoNube] = useState<{ url: string; titulo: string } | null>(null);
+  const [videoNube, setVideoNube] = useState<{
+    url: string;
+    titulo: string;
+    clip?: ClipBitacora;
+    blobUrl?: string;
+  } | null>(null);
   const [cargandoNube, setCargandoNube] = useState(false);
+  const [errorVideoNube, setErrorVideoNube] = useState<string | null>(null);
+  const [conteoCarpetas, setConteoCarpetas] = useState<{
+    todas: number;
+    sospechoso: number;
+    evidencia: number;
+    cuarentena: number;
+  }>({
+    todas: 0,
+    sospechoso: 0,
+    evidencia: 0,
+    cuarentena: 0,
+  });
+  const videoBlobRef = useRef<string | null>(null);
+  const canvasOffscreenRef = useRef<Record<string, HTMLCanvasElement>>({});
+  /** 2026-10-21: escaneo al regresar + DVR */
+  const [escaneandoRegreso, setEscaneandoRegreso] = useState(false);
+  const [progresoEscaneo, setProgresoEscaneo] = useState('');
+  /** Diario visible del escaneo (para que se vea que sí está trabajando). */
+  const [diarioEscaneo, setDiarioEscaneo] = useState<string[]>([]);
+  const [infoDvr, setInfoDvr] = useState<string | null>(null);
+  /** Pestañas del panel derecho — más claro que todo amontonado */
+  const [pestanaBitacora, setPestanaBitacora] = useState<
+    'vigilar' | 'preguntar' | 'grabaciones' | 'escaneo'
+  >('grabaciones');
+  const [carpetaActiva, setCarpetaActiva] = useState<'todas' | BandejaForense>('todas');
+  const [diasEscaneo, setDiasEscaneo] = useState<7 | 14 | 21>(7);
   const [generandoInforme, setGenerandoInforme] = useState(false);
   const [informeDia, setInformeDia] = useState<string | null>(null);
   const [mostrarInforme, setMostrarInforme] = useState(false);
@@ -516,18 +615,60 @@ export function Videovigilancia({ ventas = [], sesionesCaja = [], onIrAuditoria 
     toast.success('Cámara eliminada');
   };
 
-  const capturarFrame = (camaraId: string): string | null => {
-    const img = videoRefs.current[camaraId];
+  /** Carga una foto same-origin (proxy) para dibujar/grabar sin contaminar el lienzo. Reintenta si go2rtc está ocupado. */
+  const cargarImagenGrabable = useCallback(async (urlCamara: string, timeoutMs = 8000): Promise<HTMLImageElement | null> => {
+    const desdeBlob = async (proxyUrl: string): Promise<HTMLImageElement | null> => {
+      try {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), timeoutMs);
+        const r = await fetch(proxyUrl, { signal: ctrl.signal, cache: 'no-store' });
+        clearTimeout(t);
+        if (!r.ok) return null;
+        const blob = await r.blob();
+        if (blob.size < 32) return null;
+        const obj = URL.createObjectURL(blob);
+        const im = await new Promise<HTMLImageElement | null>((resolve) => {
+          const img = new Image();
+          img.onload = () => resolve(img.naturalWidth > 0 ? img : null);
+          img.onerror = () => resolve(null);
+          img.src = obj;
+        });
+        URL.revokeObjectURL(obj);
+        return im;
+      } catch {
+        return null;
+      }
+    };
+
+    // 1) Preferir go2rtc local (127.0.0.1) vía puente
+    let img = await desdeBlob(urlParaGrabar(conBuster(urlCamara)));
+    if (img) return img;
+    await new Promise((r) => setTimeout(r, 600));
+    img = await desdeBlob(urlParaGrabar(conBuster(urlCamara)));
+    if (img) return img;
+
+    // 2) Si falló y era Tailscale reescrito: probar Tailscale original por el puente
+    if (esUrlTailscale(urlCamara) && puedeUsarPuenteCamara(urlCamara)) {
+      const viaTs = `/__camara?u=${encodeURIComponent(conBuster(urlCamara))}`;
+      img = await desdeBlob(viaTs);
+    }
+    return img;
+  }, []);
+
+  const capturarFrame = async (camaraId: string): Promise<string | null> => {
     const canvas = canvasRefs.current[camaraId];
-    if (!img || !canvas || img.getAttribute('data-error') === 'true') return null;
-    if (!img.complete || img.naturalWidth === 0) return null;
+    const cam = camarasRef.current.find((c) => c.id === camaraId);
+    if (!canvas || !cam || cam.esDemo) return null;
 
     try {
       const ctx = canvas.getContext('2d');
       if (!ctx) return null;
       canvas.width = 400;
       canvas.height = 300;
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      // 2026-10-21: no dibujar la <img> visible (otro origen → lienzo contaminado).
+      const fuente = await cargarImagenGrabable(cam.url);
+      if (!fuente) return null;
+      ctx.drawImage(fuente, 0, 0, canvas.width, canvas.height);
       return canvas.toDataURL('image/jpeg', 0.6);
     } catch (e) {
       console.warn('CORS bloqueó el canvas (tainted).', e);
@@ -556,13 +697,13 @@ export function Videovigilancia({ ventas = [], sesionesCaja = [], onIrAuditoria 
         await new Promise((r) => setTimeout(r, 450));
       }
 
-      const frame = capturarFrame(camara.id);
+      const frame = await capturarFrame(camara.id);
       setUltimaCamaraEscaneada(camara.id);
 
       if (!frame) {
         const motivo = esUrlHttpLocal(camara.url)
-          ? 'Sin imagen: cámara HTTP local bloqueada o CORS. En Chrome: candado → Contenido no seguro → Permitir (solo en esta app).'
-          : 'Sin imagen: la cámara no cargó o el navegador bloqueó el canvas (CORS).';
+          ? 'Sin imagen: cámara HTTP local / puente. ¿ABRIR_DULCE_PLACER_LOCAL y go2rtc encendidos?'
+          : 'Sin imagen: el proxy /api/camara no recibió foto (¿Tailscale + go2rtc?).';
         agregarLog(`[${camara.nombre}] ${motivo}`, true);
         return;
       }
@@ -654,11 +795,17 @@ export function Videovigilancia({ ventas = [], sesionesCaja = [], onIrAuditoria 
   const grabarClipCamara = useCallback(
     async (camara: Camara, motivo?: string) => {
       if (camara.esDemo || grabandoCamaraIds.current.has(camara.id)) return;
-      const img = videoRefs.current[camara.id];
-      const canvas = canvasRefs.current[camara.id];
-      if (!img || !canvas) return;
+      // Con pestaña Videos las cámaras pueden estar ocultas: no exigir <img> visible.
+      let canvas = canvasRefs.current[camara.id];
+      if (!canvas) {
+        if (!canvasOffscreenRef.current[camara.id]) {
+          canvasOffscreenRef.current[camara.id] = document.createElement('canvas');
+        }
+        canvas = canvasOffscreenRef.current[camara.id];
+      }
 
       if (typeof MediaRecorder === 'undefined' || typeof canvas.captureStream !== 'function') {
+        marcarGrab(camara.nombre, 'este navegador no permite grabar video');
         return; // Navegador sin soporte: no insistimos con alertas repetidas.
       }
 
@@ -671,20 +818,15 @@ export function Videovigilancia({ ventas = [], sesionesCaja = [], onIrAuditoria 
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        // Fuente de la grabación: por el puente (mismo origen) si se puede; si no, la imagen visible.
-        let fuente: HTMLImageElement = img;
+        // 2026-10-20 + 2026-10-21: la <img> visible es de otro origen (Tailscale/go2rtc) → no se puede grabar.
+        // Siempre pedimos frames por mismo origen: /__camara (LAN local) o /api/camara (Vercel→Tailscale).
         const porPuente = puedeUsarPuenteCamara(camara.url);
-        if (porPuente) {
-          const im = new Image();
-          im.crossOrigin = 'anonymous';
-          const cargo = await new Promise<boolean>((ok) => {
-            const t = setTimeout(() => ok(false), 6000);
-            im.onload = () => { clearTimeout(t); ok(true); };
-            im.onerror = () => { clearTimeout(t); ok(false); };
-            im.src = urlPuenteCamara(camara.tipo === 'snapshot' ? conBuster(camara.url) : camara.url);
-          });
-          if (cargo) fuente = im;
-          else agregarLog(`[Bitácora · ${camara.nombre}] El puente de cámara no respondió; se intenta con la imagen directa.`);
+        let fuente = await cargarImagenGrabable(camara.url);
+        if (!fuente) {
+          const via = porPuente ? 'puente local /__camara' : 'proxy /api/camara (Tailscale/go2rtc)';
+          agregarLog(`[Bitácora · ${camara.nombre}] No llegó imagen por ${via}. ¿go2rtc y Tailscale encendidos?`, true);
+          marcarGrab(camara.nombre, `BLOQUEADO: no llegó imagen grabable (${via})`);
+          return;
         }
 
         const stream = canvas.captureStream(5);
@@ -699,30 +841,29 @@ export function Videovigilancia({ ventas = [], sesionesCaja = [], onIrAuditoria 
         };
 
         const dibujar = async () => {
-          if (camara.tipo === 'snapshot') {
-            if (fuente !== img) fuente.src = urlPuenteCamara(conBuster(camara.url));
-            else refrescarSnapshot(camara.id);
-            await new Promise((r) => setTimeout(r, 300));
-          }
+          // Cada ~1.5 s (no más rápido: go2rtc se satura si las 4 cámaras piden a la vez).
+          const siguiente = await cargarImagenGrabable(camara.url, 6000);
+          if (siguiente) fuente = siguiente;
           try {
-            if (fuente.complete && fuente.naturalWidth > 0 && fuente.getAttribute('data-error') !== 'true') {
+            if (fuente && fuente.complete && fuente.naturalWidth > 0) {
               ctx.drawImage(fuente, 0, 0, canvas.width, canvas.height);
             }
           } catch {
-            /* CORS bloqueó ese frame puntual: se ignora y se sigue con el siguiente */
+            /* frame puntual falló: se sigue con el siguiente */
           }
         };
 
         await dibujar();
-        // Si el lienzo quedó "contaminado", el navegador no deja grabar: avisar en vez de fallar callado.
+        // Si el lienzo quedó "contaminado", avisar (no debería pasar con el proxy).
         try { ctx.getImageData(0, 0, 1, 1); } catch {
-          agregarLog(`[Bitácora · ${camara.nombre}] El navegador no deja grabar esta cámara (imagen de otro origen). Abre la app con ABRIR_DULCE_PLACER_LOCAL en el PC de las cámaras.`, true);
+          agregarLog(`[Bitácora · ${camara.nombre}] El navegador no deja grabar (lienzo contaminado). Revisa /api/camara y go2rtc.`, true);
+          marcarGrab(camara.nombre, `BLOQUEADO: el navegador no deja grabar la imagen de esta cámara (dirección: ${camara.url.replace(/\/\/[^@/]*@/, '//***@').slice(0, 70)})`);
           stream.getTracks().forEach((t) => t.stop());
           return;
         }
         dibujoInterval = setInterval(() => {
           void dibujar();
-        }, 500);
+        }, 1500);
 
         const clipListo = new Promise<Blob>((resolve, reject) => {
           recorder.onstop = () => resolve(new Blob(chunks, { type: mimeType }));
@@ -739,6 +880,7 @@ export function Videovigilancia({ ventas = [], sesionesCaja = [], onIrAuditoria 
 
         if (blob.size < 500) { // Prácticamente vacío: no había imagen real que grabar
           agregarLog(`[Bitácora · ${camara.nombre}] Clip vacío (la cámara no mandó imagen); no se guardó.`);
+          marcarGrab(camara.nombre, 'video vacío (la cámara no mandó imagen)');
           return;
         }
 
@@ -792,6 +934,7 @@ export function Videovigilancia({ ventas = [], sesionesCaja = [], onIrAuditoria 
           console.error('Bitácora visual: error analizando el clip:', err);
         }
 
+        marcarGrab(camara.nombre, 'video guardado en la nube ✓', true);
         const cuandoClip = new Date(registro.capturado_en);
         const ficha = {
           contexto: motivo || 'ronda',
@@ -810,21 +953,27 @@ export function Videovigilancia({ ventas = [], sesionesCaja = [], onIrAuditoria 
         }).catch((err) => console.error('Bitácora visual: no se copió a la carpeta de la situación', err));
       } catch (err) {
         console.error('Bitácora visual: error grabando el clip:', err);
+        marcarGrab(camara.nombre, `ERROR al guardar: ${(err as any)?.message || String(err)}`.slice(0, 200));
       } finally {
         if (dibujoInterval) clearInterval(dibujoInterval);
         grabandoCamaraIds.current.delete(camara.id);
       }
     },
-    [agregarLog]
+    [agregarLog, cargarImagenGrabable]
   );
 
+  /** Una cámara tras otra (go2rtc se cae si las 4 piden frame a la vez). */
   const cicloGrabacion = useCallback(() => {
     if (!grabacionRef.current) return;
     if (modoClipsRef.current === 'eventos') return; // en "solo eventos" no se graba a ciegas
     const activas = camarasRef.current.filter((c) => c.activa && !c.esDemo && !c.deletedAt);
-    activas.forEach((c) => {
-      void grabarClipCamara(c);
-    });
+    void (async () => {
+      for (let i = 0; i < activas.length; i++) {
+        if (!grabacionRef.current) break;
+        await grabarClipCamara(activas[i]);
+        if (i < activas.length - 1) await new Promise((r) => setTimeout(r, 1200));
+      }
+    })();
   }, [grabarClipCamara]);
 
   const toggleGrabacion = () => {
@@ -907,6 +1056,33 @@ export function Videovigilancia({ ventas = [], sesionesCaja = [], onIrAuditoria 
       : 'Modo estación desactivado.');
   };
 
+  // 2026-10-20 (AUTORIZO Gonzalo): UN solo botón que prende todo — vigilar las cámaras, grabar
+  // (cada minuto + cuando pasa algo en caja) y dejar este PC como estación (arranca solo y no apaga pantalla).
+  const todoActivo = estacion && odysseusActivo && grabacionActiva;
+  const vigilarTodo = () => {
+    if (!puedeGestionar) {
+      toast.error('Solo ADMIN o GERENTE pueden activar la vigilancia');
+      return;
+    }
+    if (todoActivo) {
+      toggleOdysseus();
+      toggleGrabacion();
+      cambiarEstacion();
+      return;
+    }
+    setModoClips('ambos');
+    modoClipsRef.current = 'ambos';
+    guardarModoClips('ambos');
+    autoArranqueRef.current = true; // ya se prende aquí; evita que el modo estación lo prenda dos veces
+    if (!estacion) {
+      setEstacionActiva(true);
+      setEstacion(true);
+    }
+    if (!odysseusActivo) toggleOdysseus();
+    if (!grabacionActiva) toggleGrabacion();
+    toast.success('Vigilancia completa: las cámaras se revisan y se graban. Deja este PC encendido con la app abierta.');
+  };
+
   const guardarAlertas = (c: ConfigAlertas) => {
     setCfgAlertas(c);
     guardarConfigAlertas(c);
@@ -937,33 +1113,596 @@ export function Videovigilancia({ ventas = [], sesionesCaja = [], onIrAuditoria 
     }
   };
 
+  const cerrarVideoNube = () => {
+    if (videoBlobRef.current) {
+      URL.revokeObjectURL(videoBlobRef.current);
+      videoBlobRef.current = null;
+    }
+    setVideoNube(null);
+    setErrorVideoNube(null);
+  };
+
   const abrirClipBitacora = async (clip: ClipBitacora) => {
-    const url = await urlFirmadaClip(clip.url_clip);
+    setErrorVideoNube(null);
+    const url = await urlFirmadaClip(clip.url_clip, 7200);
     if (!url) {
       toast.error('No se pudo abrir el video de la nube');
       return;
     }
     const quien = clip.trabajador_id || 'Sin trabajador marcado';
     const situacion = clip.clasificacion || 'sin situación';
-    setVideoNube({
-      url,
-      titulo: `${quien} · ${situacion} · ${clip.camara_nombre || clip.camara_id}`,
-    });
+    const titulo = `${clip.camara_nombre || clip.camara_id} · ${quien} · ${situacion}`;
+    // Blob local: Chrome reproduce mejor el WebM de canvas.captureStream que el URL firmado directo.
+    let blobUrl: string | undefined;
+    try {
+      const r = await fetch(url);
+      if (r.ok) {
+        const blob = await r.blob();
+        const typed = blob.type?.includes('video')
+          ? blob
+          : new Blob([blob], { type: 'video/webm' });
+        if (videoBlobRef.current) URL.revokeObjectURL(videoBlobRef.current);
+        blobUrl = URL.createObjectURL(typed);
+        videoBlobRef.current = blobUrl;
+      }
+    } catch {
+      /* se usa signed URL */
+    }
+    setVideoNube({ url: blobUrl || url, titulo, clip, blobUrl });
+    setPestanaBitacora('grabaciones');
   };
 
   const verGrabacionesNube = async () => {
+    setPestanaBitacora('grabaciones');
+    await abrirCarpetaUI('todas');
+  };
+
+  const verClipsEnRevision = async () => {
+    setCarpetaActiva('evidencia');
+    setPestanaBitacora('grabaciones');
+    await abrirCarpetaUI('evidencia');
+  };
+
+  const refrescarConteosCarpetas = async () => {
+    try {
+      const [todas, sospechoso, evidencia, cuarentena] = await Promise.all([
+        clipsPorCarpetaUI('todas', 100),
+        clipsPorCarpetaUI('sospechoso', 40),
+        clipsPorCarpetaUI('evidencia', 40),
+        clipsPorCarpetaUI('cuarentena', 40),
+      ]);
+      setConteoCarpetas({
+        todas: todas.length,
+        sospechoso: sospechoso.length,
+        evidencia: evidencia.length,
+        cuarentena: cuarentena.length,
+      });
+    } catch {
+      /* conteos opcionales */
+    }
+  };
+
+  const abrirCarpetaUI = async (carpeta: 'todas' | BandejaForense) => {
+    setCarpetaActiva(carpeta);
     setCargandoNube(true);
     try {
-      const lista = await clipsRecientes(40);
+      const lista = await clipsPorCarpetaUI(carpeta, 100);
       setResultadosBusqueda(lista);
+      const nombre =
+        carpeta === 'todas'
+          ? 'Todas'
+          : carpeta === 'cuarentena'
+            ? 'Cuarentena'
+            : carpeta === 'sospechoso'
+              ? 'Sospechoso'
+              : 'Revisión';
       if (lista.length === 0) {
-        toast.message('Todavía no hay grabaciones en la nube. Se guardan cuando el PC de las cámaras está grabando.');
+        toast.message(
+          carpeta === 'todas'
+            ? 'Carpeta Todas: vacía por ahora'
+            : `${nombre} vacía · los grabados están en Todas`
+        );
+      } else {
+        toast.message(`${lista.length} video(s) en ${nombre}`);
       }
+      void refrescarConteosCarpetas();
     } catch (err) {
-      toast.error('No se pudieron leer las grabaciones de la nube');
+      toast.error('No se pudo abrir la carpeta');
       console.error(err);
     } finally {
       setCargandoNube(false);
+    }
+  };
+
+  // Al abrir Videos SIEMPRE ir a "Todas" (ahí están los grabados; Sospechoso/Cuarentena suelen estar vacías).
+  useEffect(() => {
+    if (pestanaBitacora !== 'grabaciones') return;
+    void abrirCarpetaUI('todas');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pestanaBitacora]);
+
+  /** Conecta al DVR Hikvision (solo app local + LAN). */
+  const conectarDvr = async () => {
+    if (!puedeGestionar) {
+      toast.error('Solo ADMIN o GERENTE');
+      return;
+    }
+    setProgresoEscaneo('Conectando al DVR…');
+    const info = await probarConexionDvr();
+    if (!info.ok) {
+      setInfoDvr(null);
+      toast.error(info.error || 'No conecté al DVR. ¿ABRIR_DULCE_PLACER_LOCAL en el PC del local?');
+      setProgresoEscaneo('');
+      return;
+    }
+    setInfoDvr(`${info.modelo || 'DVR'} · fw ${info.firmware || '?'}`);
+    toast.success(`DVR OK: ${info.modelo}`);
+    setProgresoEscaneo('');
+  };
+
+  /** Lista segmentos del DVR (últimos N días) sin bajar todo el video aún. */
+  const listarGrabacionesDvr = async (dias: 7 | 14 | 21) => {
+    if (!puedeGestionar) return;
+    setProgresoEscaneo(`Buscando en DVR (${dias} días)…`);
+    const r = await buscarGrabacionesDvr({ dias, maxPorPista: 30 });
+    if (!r.ok) {
+      toast.error(r.error || 'Falló la búsqueda en el DVR');
+      setProgresoEscaneo('');
+      return;
+    }
+    const resumen = r.segmentos
+      .slice(0, 12)
+      .map((s) => `${etiquetaPista(s.trackId)} · ${s.inicio.slice(0, 16)} → ${s.fin.slice(11, 16)}`)
+      .join('\n');
+    agregarLog(
+      `[DVR] ${r.total} tramo(s) en ${dias} días` +
+        (r.hayMas ? ' (hay más en el disco)' : '') +
+        (resumen ? `\n${resumen}` : '')
+    );
+    toast.message(`DVR: ${r.total} tramos hallados (${dias} días)${r.hayMas ? ' · hay más' : ''}`);
+    setProgresoEscaneo('');
+  };
+
+  /** Reduce JPEG para gastar menos cuota de Gemini en el escaneo. */
+  const reducirFrameEscaneo = (dataUrl: string, maxW = 480, maxH = 360, calidad = 0.62): Promise<string> =>
+    new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.naturalWidth || maxW;
+        let h = img.naturalHeight || maxH;
+        const scale = Math.min(1, maxW / w, maxH / h);
+        w = Math.max(1, Math.round(w * scale));
+        h = Math.max(1, Math.round(h * scale));
+        const c = document.createElement('canvas');
+        c.width = w;
+        c.height = h;
+        const ctx = c.getContext('2d');
+        if (!ctx) {
+          resolve(dataUrl);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(c.toDataURL('image/jpeg', calidad));
+      };
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
+    });
+
+  /**
+   * FORENSE DVR — NO es vigilancia en vivo.
+   * Revisa grabaciones YA guardadas en el disco (últimos N días),
+   * prioriza caja, varios fotogramas por tramo, guarda hallazgos con título+fecha.
+   * Tú revisas y borras lo que no sea sospechoso.
+   */
+  const escaneoAlRegresar = async (dias: 7 | 14 | 21) => {
+    if (!puedeGestionar) {
+      toast.error('Solo ADMIN o GERENTE');
+      return;
+    }
+    if (escaneandoRegreso) return;
+    setEscaneandoRegreso(true);
+    setDiarioEscaneo([]);
+    const notar = (linea: string, alerta = false) => {
+      setDiarioEscaneo((prev) =>
+        [`${new Date().toLocaleTimeString('es-CO', { hour12: false })} · ${linea}`, ...prev].slice(0, 60)
+      );
+      agregarLog(`[Forense DVR] ${linea}`, alerta);
+    };
+    const estabaOdysseus = odysseusActivo;
+    if (estabaOdysseus) {
+      detenerOdysseus();
+      notar('Pausé el VIVO: ahora solo reviso grabaciones viejas del DVR.');
+    }
+    let aCuarentena = 0;
+    let aSospechoso = 0;
+    let aEvidencia = 0;
+    let analizados = 0;
+    let fallosFrame = 0;
+    let fallosIa = 0;
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    // Cupos de TRAMOS (cada tramo → varios fotogramas). Caja ~55%.
+    const maxTramos = dias === 7 ? 28 : dias === 14 ? 40 : 52;
+    const framesPorTramoCaja = 3;
+    const framesPorTramoOtra = 2;
+
+    const pedirAnalisis = async (mensaje: string, dataUrl: string): Promise<string | null> => {
+      // Forense: un poco más de detalle que el vivo (gesto billete/bolsillo)
+      const frame = await reducirFrameEscaneo(dataUrl, 640, 480, 0.72);
+      let ultimo = '';
+      for (let intento = 1; intento <= 3; intento++) {
+        try {
+          const res = await consultarAgente('odysseus', mensaje, () => {}, frame);
+          if (res && !/no hay proveedores/i.test(res)) return res;
+          ultimo = res || 'sin respuesta';
+        } catch (e) {
+          ultimo = e instanceof Error ? e.message : String(e);
+        }
+        const saturado = /429|Too Many|quota|rate|proveedores/i.test(ultimo);
+        if (!saturado) break;
+        const espera = 20_000 * intento;
+        setProgresoEscaneo(`IA saturada. Espero ${Math.round(espera / 1000)}s… (${intento}/3)`);
+        notar(`IA saturada, reintento en ${Math.round(espera / 1000)}s`, true);
+        await sleep(espera);
+      }
+      return null;
+    };
+
+    const guardarHallazgo = async (opts: {
+      bandeja: BandejaForense;
+      camara: string;
+      parseado: ReturnType<typeof parsearRespuestaClipOdysseus>;
+      cuando: Date;
+      dataUrl?: string;
+      rutaClip?: string;
+      textoIa?: string;
+    }) => {
+      const reporteIa = opts.textoIa ? extraerReporteForense(opts.textoIa) : null;
+      const titulo = tituloHallazgoForense({
+        camara: opts.camara,
+        categorias: opts.parseado.categorias,
+        clasificacion: opts.parseado.clasificacion,
+        descripcion: opts.parseado.descripcion,
+        cuando: opts.cuando,
+        reporteIa,
+      });
+      const descCompleta = [
+        titulo,
+        opts.parseado.descripcion,
+        opts.parseado.categorias.length ? `Categorías: ${opts.parseado.categorias.join(', ')}` : '',
+      ]
+        .filter(Boolean)
+        .join(' — ');
+      let ruta: string | null = null;
+      if (opts.dataUrl) {
+        const blob = dataUrlABlob(opts.dataUrl);
+        if (blob) {
+          ruta = await archivarBlobEnBandejaForense(blob, opts.bandeja, {
+            camara: opts.camara,
+            descripcion: opts.parseado.descripcion,
+            titulo,
+            cuando: opts.cuando,
+          });
+          try {
+            const rutaOrig = await subirClipBitacora(blob, `dvr-${nombreCarpetaNube(opts.camara)}`);
+            const reg = await guardarClipBitacora({
+              camara_id: `dvr-${opts.camara}`,
+              camara_nombre: opts.camara,
+              url_clip: rutaOrig,
+              duracion_segundos: 1,
+              capturado_en: opts.cuando.toISOString(),
+            });
+            await marcarClipAnalizado(reg.id, {
+              descripcion_ia: descCompleta,
+              clasificacion: opts.parseado.clasificacion,
+              categorias_detectadas: opts.parseado.categorias as CategoriaBitacora[],
+              alerta: opts.parseado.alerta,
+            });
+          } catch {
+            /* storage ok aunque falle la tabla */
+          }
+        }
+      } else if (opts.rutaClip) {
+        ruta = await archivarClipEnBandejaForense(opts.rutaClip, opts.bandeja, {
+          camara: opts.camara,
+          descripcion: opts.parseado.descripcion,
+          titulo,
+          cuando: opts.cuando,
+        });
+      }
+      if (ruta) {
+        if (opts.bandeja === 'cuarentena') aCuarentena += 1;
+        else if (opts.bandeja === 'sospechoso') aSospechoso += 1;
+        else aEvidencia += 1;
+        notar(`→ ${opts.bandeja.toUpperCase()}: ${titulo}`, opts.bandeja === 'cuarentena');
+        if (opts.dataUrl && (location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+          const m = opts.dataUrl.match(/^data:[^;]+;base64,(.+)$/);
+          if (m) {
+            void fetch('/__evidencia', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                tipo: opts.parseado.categorias[0] || opts.bandeja,
+                camara: opts.camara,
+                titulo,
+                descripcion: opts.parseado.descripcion,
+                cuando: opts.cuando.toISOString(),
+                dataBase64: m[1],
+                ext: 'jpg',
+              }),
+            })
+              .then((r) => r.json())
+              .then((j: { ok?: boolean; ruta?: string }) => {
+                if (j.ok) notar(`Copia en D:\\DulcePlacerEvidencia\\${j.ruta || ''}`);
+              })
+              .catch(() => undefined);
+          }
+        }
+      }
+    };
+
+    try {
+      const hasta = new Date();
+      const desde = new Date();
+      desde.setDate(desde.getDate() - (dias - 1));
+      const ymdLocal = (d: Date) => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      };
+      const desdeISO = ymdLocal(desde);
+      const hastaISO = ymdLocal(hasta);
+
+      if (!infoDvr) {
+        setProgresoEscaneo('Conectando DVR…');
+        notar('Conectando al DVR (disco de grabaciones)…');
+        const info = await probarConexionDvr();
+        if (info.ok) {
+          setInfoDvr(`${info.modelo || 'DVR'} · fw ${info.firmware || '?'}`);
+          notar(`DVR OK: ${info.modelo || 'conectado'}`);
+        } else {
+          toast.error(info.error || 'Sin puente DVR. Abre ABRIR_DULCE_PLACER_LOCAL.');
+          notar(info.error || 'Sin DVR — no puedo leer grabaciones viejas', true);
+          return;
+        }
+      }
+
+      setProgresoEscaneo(`Buscando grabaciones ${desdeISO} → ${hastaISO}…`);
+      notar(`FORENSE: buscar en disco últimos ${dias} días (${desdeISO}→${hastaISO})…`);
+      const busqueda = await buscarGrabacionesDvr({ dias, maxPorPista: 80 });
+      if (!busqueda.ok) {
+        toast.error(busqueda.error || 'El DVR no devolvió grabaciones');
+        notar(busqueda.error || 'Puente DVR no respondió', true);
+        return;
+      }
+      if (busqueda.erroresPista?.length) {
+        notar(`Pistas con error: ${busqueda.erroresPista.join(', ')}`, true);
+      }
+
+      const tramos = muestrearSegmentosDvrForense(busqueda.segmentos, maxTramos);
+      type Momento = { trackId: string; cuando: string; fin: string };
+      const momentos: Momento[] = [];
+      for (const seg of tramos) {
+        const n =
+          seg.trackId === '101' ? framesPorTramoCaja : framesPorTramoOtra;
+        for (const cuando of instantesForensesEnSegmento(seg, n)) {
+          momentos.push({ trackId: seg.trackId, cuando, fin: seg.fin });
+        }
+      }
+      notar(
+        `Disco: ${busqueda.total} tramos · ${tramos.length} elegidos · ${momentos.length} fotogramas (caja prioritaria)`
+      );
+      toast.message(`Forense DVR: ${momentos.length} fotogramas de grabaciones (${dias} días)`);
+
+      for (let i = 0; i < momentos.length; i++) {
+        const mom = momentos[i];
+        const nombreCam = etiquetaPista(mom.trackId);
+        const pct = Math.round(((i + 1) / Math.max(1, momentos.length)) * 100);
+        const marca = mom.cuando.slice(0, 19).replace('T', ' ');
+        setProgresoEscaneo(`${pct}% · ${i + 1}/${momentos.length} · ${nombreCam} · ${marca}`);
+        notar(`Disco ${nombreCam} · ${marca}`);
+        const frameRes = await capturarFrameDvr(mom.trackId, mom.cuando);
+        if (!frameRes.ok || !frameRes.dataUrl) {
+          fallosFrame += 1;
+          notar(`Sin frame ${nombreCam}: ${frameRes.error || 'error'}`, true);
+          continue;
+        }
+        if (frameRes.fuente === 'live-fallback') {
+          notar(`⚠ ${nombreCam}: el puente dio foto en vivo (no histórico) — lo salto`, true);
+          fallosFrame += 1;
+          continue;
+        }
+        const mensaje = [
+          promptEscaneoAlRegresar(nombreCam, dias, mom.cuando),
+          `Tramo disco hasta: ${mom.fin}`,
+          `Fuente: ${frameRes.fuente || 'playback'}`,
+        ].join('\n');
+        const res = await pedirAnalisis(mensaje, frameRes.dataUrl);
+        if (!res) {
+          fallosIa += 1;
+          if (fallosIa >= 3) {
+            toast.error('Gemini sin cuota (429). Espera unos minutos o usa 7 días.');
+            notar('Aborto: cuota IA agotada', true);
+            break;
+          }
+          continue;
+        }
+        const parseado = parsearRespuestaClipOdysseus(res.trim());
+        analizados += 1;
+        fallosIa = 0;
+        const bandeja = bandejaDesdeAnalisis({
+          alerta: parseado.alerta,
+          clasificacion: parseado.clasificacion,
+          categorias: parseado.categorias,
+          descripcion: parseado.descripcion,
+        });
+        if (bandeja) {
+          await guardarHallazgo({
+            bandeja,
+            camara: nombreCam,
+            parseado,
+            cuando: new Date(mom.cuando),
+            dataUrl: frameRes.dataUrl,
+            textoIa: res,
+          });
+        } else {
+          notar(`OK ${nombreCam} ${marca}: sin irregularidad`);
+        }
+        if (i < momentos.length - 1) await sleep(4_500);
+      }
+
+      if (analizados === 0) {
+        const detalle =
+          fallosIa > 0
+            ? 'Gemini sin cuota (429). Espera unos minutos.'
+            : momentos.length === 0
+              ? 'No hay grabaciones DVR en ese rango'
+              : `Fallaron frames históricos (${fallosFrame})`;
+        toast.error(`Forense sin resultados: ${detalle}`);
+        notar(`Sin resultados · ${detalle}`, true);
+        return;
+      }
+
+      const msg = `Forense ${dias}d: ${analizados} revisados · sospechoso ${aSospechoso} · evidencia ${aEvidencia} · cuarentena ${aCuarentena}`;
+      notar(msg, aCuarentena > 0);
+      toast.success(msg);
+      setPestanaBitacora('grabaciones');
+      const dest: BandejaForense =
+        aCuarentena > 0 ? 'cuarentena' : aEvidencia > 0 ? 'evidencia' : 'sospechoso';
+      setCarpetaActiva(dest);
+      await abrirCarpetaUI(dest);
+    } catch (err) {
+      console.error(err);
+      toast.error(err instanceof Error ? err.message : 'Falló el forense DVR');
+      notar(err instanceof Error ? err.message : 'Error forense', true);
+    } finally {
+      setEscaneandoRegreso(false);
+      setProgresoEscaneo('');
+      if (estabaOdysseus) {
+        toast.message('El VIVO sigue pausado. Actívalo aparte cuando quieras.');
+      }
+    }
+  };
+
+  /** La IA revisa los videos ya guardados en D: según las reglas forenses. */
+  const revisarVideosDisco = async () => {
+    if (!puedeGestionar || escaneandoRegreso) return;
+    if (location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+      toast.error('Esa revisión lee D:\\ y solo corre en la app local');
+      return;
+    }
+    setEscaneandoRegreso(true);
+    setDiarioEscaneo([]);
+    const notar = (linea: string, alerta = false) => {
+      setDiarioEscaneo((prev) =>
+        [`${new Date().toLocaleTimeString('es-CO', { hour12: false })} · ${linea}`, ...prev].slice(0, 60)
+      );
+      agregarLog(`[Reglas D:] ${linea}`, alerta);
+    };
+    try {
+      const listaRes = await fetch('/__evidencia?op=pendientes', { cache: 'no-store' });
+      if (!listaRes.ok) {
+        toast.error('Reinicia ABRIR_DULCE_PLACER_LOCAL para activar la revisión en D:\\');
+        return;
+      }
+      const lista = (await listaRes.json()) as {
+        ok?: boolean;
+        videos?: { origen: string; rel: string; nombre: string }[];
+      };
+      const videos = lista.videos || [];
+      notar(`${videos.length} videos en D:\\ sin pasar por las reglas actuales`);
+      if (videos.length === 0) {
+        toast.message('No hay videos nuevos en D:\\DulcePlacerEvidencia ni en PruebaIA');
+        return;
+      }
+      let hallazgos = 0;
+      for (let i = 0; i < videos.length; i++) {
+        const v = videos[i];
+        setProgresoEscaneo(`Reglas ${i + 1}/${videos.length} · ${v.nombre}`);
+        notar(`Revisando ${v.origen} · ${v.nombre}`);
+        const fr = await fetch(
+          `/__evidencia?op=frame&origen=${encodeURIComponent(v.origen)}&rel=${encodeURIComponent(v.rel)}`,
+          { cache: 'no-store' }
+        );
+        const fj = (await fr.json()) as { ok?: boolean; frames?: string[]; error?: string };
+        if (!fj.ok || !fj.frames?.length) {
+          notar(fj.error || `Sin fotograma en ${v.nombre}`, true);
+          continue;
+        }
+        let mejor: ReturnType<typeof parsearRespuestaClipOdysseus> | null = null;
+        let texto = '';
+        for (const b64 of fj.frames) {
+          const dataUrl = `data:image/jpeg;base64,${b64}`;
+          const frame = await reducirFrameEscaneo(dataUrl, 640, 480, 0.72);
+          const res = await consultarAgente(
+            'odysseus',
+            promptEscaneoAlRegresar(v.nombre, 7),
+            () => {},
+            frame
+          );
+          if (!res) continue;
+          const parseado = parsearRespuestaClipOdysseus(res.trim());
+          texto = res;
+          if (!mejor || parseado.alerta || (parseado.categorias.length > (mejor.categorias.length || 0))) {
+            mejor = parseado;
+          }
+          if (parseado.alerta || parseado.categorias.length > 0) break;
+        }
+        const bandeja = mejor
+          ? bandejaDesdeAnalisis({
+              alerta: mejor.alerta,
+              clasificacion: mejor.clasificacion,
+              categorias: mejor.categorias,
+              descripcion: mejor.descripcion,
+            })
+          : null;
+        const titulo = mejor
+          ? tituloHallazgoForense({
+              camara: v.nombre,
+              categorias: mejor.categorias,
+              clasificacion: mejor.clasificacion,
+              descripcion: mejor.descripcion,
+              reporteIa: extraerReporteForense(texto),
+            })
+          : '';
+        await fetch('/__evidencia', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            op: 'marcar',
+            origen: v.origen,
+            rel: v.rel,
+            tipo: mejor?.categorias[0] || 'ninguna',
+            titulo,
+            descripcion: mejor?.descripcion || 'SIN_ANOMALIA',
+            categorias: mejor?.categorias || [],
+            clasificacion: bandeja ? mejor?.clasificacion || 'regular' : 'bueno',
+          }),
+        });
+        if (bandeja && mejor && fj.frames[0]) {
+          hallazgos += 1;
+          const blob = dataUrlABlob(`data:image/jpeg;base64,${fj.frames[0]}`);
+          if (blob) {
+            await archivarBlobEnBandejaForense(blob, bandeja, {
+              camara: v.nombre,
+              titulo,
+              descripcion: mejor.descripcion,
+            });
+          }
+          notar(`→ ${bandeja.toUpperCase()}: ${titulo}`, bandeja === 'cuarentena');
+        } else {
+          notar(`OK ${v.nombre}: las reglas no vieron irregularidad`);
+        }
+        if (i < videos.length - 1) await new Promise((r) => setTimeout(r, 4000));
+      }
+      toast.success(`Reglas en D:\\: ${videos.length} videos · ${hallazgos} hallazgos`);
+      notar(`Listo. ${hallazgos} hallazgos. Lo demás queda marcado sin anomalía.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No pude revisar D:\\');
+      notar(err instanceof Error ? err.message : 'Error', true);
+    } finally {
+      setEscaneandoRegreso(false);
+      setProgresoEscaneo('');
     }
   };
 
@@ -1040,10 +1779,10 @@ export function Videovigilancia({ ventas = [], sesionesCaja = [], onIrAuditoria 
       await new Promise((r) => setTimeout(r, 450));
     }
 
-    const frame = capturarFrame(cam.id);
+    const frame = await capturarFrame(cam.id);
     if (!frame) {
       agregarLog(
-        `[${cam.nombre}] SIN_IMAGEN: no puedo responder. Revisa Contenido no seguro / puente encendido.`,
+        `[${cam.nombre}] SIN_IMAGEN: no puedo responder. Revisa Tailscale/go2rtc o el puente local.`,
         true
       );
       toast.error('Sin imagen de la cámara');
@@ -1107,7 +1846,20 @@ export function Videovigilancia({ ventas = [], sesionesCaja = [], onIrAuditoria 
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+            <Button
+              onClick={vigilarTodo}
+              disabled={!puedeGestionar}
+              className={cn(
+                'h-10 px-6 rounded-xl font-black uppercase text-xs tracking-widest disabled:opacity-40',
+                todoActivo
+                  ? 'bg-red-600 hover:bg-red-500 text-white animate-pulse'
+                  : 'bg-emerald-500 hover:bg-emerald-400 text-black'
+              )}
+              title="Prende todo de una vez: vigilar, grabar y dejar este PC como estación"
+            >
+              <Shield className="w-4 h-4 mr-2" /> {todoActivo ? 'Vigilando y grabando · Apagar' : 'Vigilar y grabar todo'}
+            </Button>
             <Button
               onClick={cambiarModoClips}
               disabled={!puedeGestionar}
@@ -1152,7 +1904,7 @@ export function Videovigilancia({ ventas = [], sesionesCaja = [], onIrAuditoria 
               disabled={!puedeGestionar}
               className="bg-indigo-600 hover:bg-indigo-700 h-10 px-4 rounded-xl text-white font-bold"
             >
-              <BrainCircuit className="w-4 h-4 mr-2" /> Activar Ojo IA
+              <BrainCircuit className="w-4 h-4 mr-2" /> Cámara de este PC (Ojo IA)
             </Button>
             <Button
               onClick={() => setModalOpen(true)}
@@ -1195,11 +1947,102 @@ export function Videovigilancia({ ventas = [], sesionesCaja = [], onIrAuditoria 
           >
             <Film className="w-4 h-4 mr-2" /> {grabacionActiva ? 'Grabando Bitácora' : 'Activar Grabación'}
           </Button>
+          {grabacionActiva && (
+            <p className={cn('basis-full text-xs font-bold px-3 py-2 rounded-lg', estadoGrab?.ok ? 'bg-emerald-500/15 text-emerald-300' : estadoGrab ? 'bg-red-500/15 text-red-300' : 'bg-white/5 text-slate-300')}>
+              {estadoGrab ? estadoGrab.texto : 'Grabación activa: el primer video sale en menos de 1 minuto…'}
+            </p>
+          )}
         </div>
       </header>
 
       <div className="flex-1 flex overflow-hidden relative z-10">
-        <div className="flex-1 flex flex-col p-6 overflow-y-auto custom-scrollbar bg-black/40">
+        {/* Modo Videos: reproductor amplio. Las cámaras quedan montadas pero ocultas para no romper la grabación. */}
+        {pestanaBitacora === 'grabaciones' && (
+          <div className="flex-1 flex flex-col min-w-0 p-4 md:p-5 gap-3 bg-gradient-to-br from-slate-950 via-black to-slate-950">
+            <div className="flex items-center justify-between gap-3 shrink-0">
+              <div>
+                <p className="text-lg font-black text-white tracking-tight">Reproductor bitácora</p>
+                <p className="text-[12px] text-slate-400">
+                  {resultadosBusqueda.length > 0
+                    ? `${resultadosBusqueda.length} videos · toca uno a la derecha`
+                    : 'Abre una carpeta a la derecha'}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setPestanaBitacora('vigilar')}
+                className="h-9 rounded-xl border-white/15 text-slate-300 text-xs font-bold"
+              >
+                Ver cámaras en vivo
+              </Button>
+            </div>
+            <div className="flex-1 min-h-0 rounded-3xl border border-cyan-500/25 bg-black overflow-hidden flex flex-col shadow-[0_0_60px_rgba(34,211,238,0.08)]">
+              {videoNube ? (
+                <>
+                  <div className="shrink-0 flex items-center gap-3 px-4 py-3 border-b border-white/10 bg-white/[0.03]">
+                    <p className="flex-1 min-w-0 text-sm font-bold text-white truncate">{videoNube.titulo}</p>
+                    <a
+                      href={videoNube.url}
+                      download={`bitacora-${videoNube.clip?.id || 'clip'}.webm`}
+                      className="inline-flex items-center gap-1.5 h-9 px-3 rounded-xl bg-cyan-500/15 border border-cyan-400/30 text-cyan-200 text-xs font-bold hover:bg-cyan-500/25"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Descargar
+                    </a>
+                    <button
+                      type="button"
+                      onClick={cerrarVideoNube}
+                      className="h-9 w-9 rounded-xl border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 flex items-center justify-center"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <video
+                    key={videoNube.url}
+                    src={videoNube.url}
+                    controls
+                    autoPlay
+                    playsInline
+                    preload="auto"
+                    className="flex-1 w-full min-h-[42vh] object-contain bg-black"
+                    onError={() =>
+                      setErrorVideoNube(
+                        'Este navegador no reprodujo el WebM. Pulsa Descargar y ábrelo en Chrome, o VLC.'
+                      )
+                    }
+                  />
+                  {errorVideoNube && (
+                    <p className="shrink-0 px-4 py-2 text-[12px] text-rose-200 bg-rose-500/10 border-t border-rose-500/20">
+                      {errorVideoNube}
+                    </p>
+                  )}
+                  {videoNube.clip?.descripcion_ia && (
+                    <p className="shrink-0 px-4 py-3 text-[13px] text-slate-300 border-t border-white/10 leading-relaxed">
+                      {videoNube.clip.descripcion_ia}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-6">
+                  <Film className="w-14 h-14 text-cyan-500/40" />
+                  <p className="text-base font-black text-slate-200">Elige un video</p>
+                  <p className="text-[12px] text-slate-500 max-w-sm">
+                    En la lista de la derecha toca cualquier clip. Carpetas Revisión / Sospechoso /
+                    Cuarentena solo tienen los marcados por la IA.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+        <div
+          className={cn(
+            'flex-1 flex-col p-6 overflow-y-auto custom-scrollbar bg-black/40',
+            pestanaBitacora === 'grabaciones' ? 'hidden' : 'flex'
+          )}
+          aria-hidden={pestanaBitacora === 'grabaciones'}
+        >
           {haySoloDemos && (
             <div className="mb-4 p-4 bg-indigo-500/10 border border-indigo-500/30 rounded-xl flex gap-3 text-indigo-100">
               <Camera className="w-5 h-5 shrink-0 text-indigo-400" />
@@ -1368,213 +2211,479 @@ export function Videovigilancia({ ventas = [], sesionesCaja = [], onIrAuditoria 
           </div>
         </div>
 
-        <div className="w-96 bg-black/60 backdrop-blur-2xl border-l border-white/5 flex flex-col z-20">
-          <div className="shrink-0 p-5 border-b border-white/5 bg-slate-900/80 flex items-center gap-4">
-            <Shield className={cn('w-6 h-6', odysseusActivo ? 'text-emerald-400' : 'text-slate-500')} />
-            <div>
-              <h2 className="text-[15px] font-black text-white uppercase tracking-wider">
-                Bitácora ODYSSEUS
-              </h2>
-              <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-0.5">
-                Video · alertas · preguntas
-              </p>
+        <div
+          className={cn(
+            'max-w-[100vw] flex flex-col z-20 border-l border-cyan-500/20 bg-gradient-to-b from-slate-950 via-[#0a1628] to-black shadow-[-12px_0_40px_rgba(0,0,0,0.45)]',
+            pestanaBitacora === 'grabaciones' ? 'w-[22rem] sm:w-[26rem]' : 'w-[27rem]'
+          )}
+        >
+          {/* Cabecera */}
+          <div className="shrink-0 px-4 pt-4 pb-3 border-b border-white/10 bg-[radial-gradient(ellipse_at_top,_rgba(34,211,238,0.12),_transparent_55%)]">
+            <div className="flex items-center gap-3 mb-3">
+              <div
+                className={cn(
+                  'w-11 h-11 rounded-2xl flex items-center justify-center border',
+                  odysseusActivo
+                    ? 'bg-emerald-500/20 border-emerald-400/40 text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.35)]'
+                    : 'bg-white/5 border-white/10 text-slate-400'
+                )}
+              >
+                <Shield className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base font-black tracking-tight text-white">
+                  Bitácora <span className="text-cyan-300">ODYSSEUS</span>
+                </h2>
+                <p className="text-[11px] text-slate-400 truncate">
+                  {odysseusActivo ? 'Vigilando en vivo' : 'Listo para revisar videos'}
+                </p>
+              </div>
+              <span
+                className={cn(
+                  'shrink-0 text-[10px] font-bold px-2.5 py-1 rounded-full border',
+                  analizando || preguntando || escaneandoRegreso
+                    ? 'bg-cyan-500/20 border-cyan-400/40 text-cyan-200 animate-pulse'
+                    : odysseusActivo
+                      ? 'bg-emerald-500/15 border-emerald-400/30 text-emerald-300'
+                      : 'bg-white/5 border-white/10 text-slate-400'
+                )}
+              >
+                {analizando || preguntando || escaneandoRegreso
+                  ? 'Trabajando…'
+                  : odysseusActivo
+                    ? 'Activo'
+                    : 'En pausa'}
+              </span>
             </div>
-            {(analizando || preguntando) && (
-              <span className="ml-auto w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-            )}
+
+            <div className="grid grid-cols-4 gap-1 p-1 rounded-2xl bg-black/50 border border-white/10">
+              {(
+                [
+                  { id: 'grabaciones' as const, label: 'Videos', icon: Film },
+                  { id: 'escaneo' as const, label: 'Escaneo', icon: FolderSearch },
+                  { id: 'preguntar' as const, label: 'Chat', icon: MessageCircle },
+                  { id: 'vigilar' as const, label: 'Reglas', icon: Settings },
+                ] as const
+              ).map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setPestanaBitacora(t.id)}
+                  className={cn(
+                    'flex flex-col items-center gap-1 rounded-xl py-2.5 px-1 text-[10px] font-bold tracking-wide transition-all',
+                    pestanaBitacora === t.id
+                      ? 'bg-gradient-to-b from-cyan-400 to-emerald-500 text-black shadow-lg shadow-cyan-500/25'
+                      : 'text-slate-400 hover:text-white hover:bg-white/5'
+                  )}
+                >
+                  <t.icon className="w-[18px] h-[18px]" />
+                  {t.label}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* B: Qué vigilar */}
-          <div className="shrink-0 p-4 border-b border-white/5 space-y-2 max-h-[28%] overflow-y-auto">
-            <p className="text-[9px] font-black uppercase tracking-widest text-emerald-400/90">
-              Qué vigilar (configura)
-            </p>
-            <div className="space-y-1.5">
+          {/* —— Reglas —— */}
+          {pestanaBitacora === 'vigilar' && (
+            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-2.5 custom-scrollbar">
+              <div className="mb-1">
+                <p className="text-[15px] font-black text-white">Qué vigilar</p>
+                <p className="text-[12px] text-slate-400">Marca solo lo importante para ti.</p>
+              </div>
               {reglasOdysseus.map((r) => (
                 <label
                   key={r.id}
-                  className="flex items-start gap-2 cursor-pointer rounded-lg px-2 py-1.5 hover:bg-white/5"
+                  className={cn(
+                    'flex items-start gap-3 cursor-pointer rounded-2xl px-3.5 py-3 border transition-all',
+                    r.activa
+                      ? 'bg-emerald-500/10 border-emerald-400/35'
+                      : 'bg-white/[0.03] border-white/10 hover:border-white/20'
+                  )}
                 >
                   <input
                     type="checkbox"
                     checked={r.activa}
                     onChange={() => toggleRegla(r.id)}
-                    className="mt-0.5 accent-emerald-500"
+                    className="mt-1 accent-emerald-400 scale-110"
                   />
                   <span className="min-w-0">
-                    <span className="block text-[11px] font-bold text-slate-200">{r.label}</span>
-                    <span className="block text-[9px] text-slate-500 leading-snug">{r.descripcion}</span>
+                    <span className="block text-[13px] font-bold text-white">{r.label}</span>
+                    <span className="block text-[11px] text-slate-400 leading-snug mt-0.5">{r.descripcion}</span>
                   </span>
                 </label>
               ))}
             </div>
-          </div>
+          )}
 
-          {/* C: Preguntar */}
-          <div className="shrink-0 p-4 border-b border-white/5 space-y-2 bg-emerald-500/5">
-            <p className="text-[9px] font-black uppercase tracking-widest text-emerald-300 flex items-center gap-1.5">
-              <MessageCircle className="w-3.5 h-3.5" />
-              Pregúntale a ODYSSEUS
-            </p>
-            <select
-              value={camaraPreguntaId}
-              onChange={(e) => setCamaraPreguntaId(e.target.value)}
-              className="w-full bg-black/50 border border-white/10 rounded-lg px-2 py-1.5 text-[11px] text-white"
-            >
-              {camaras.filter((c) => !c.esDemo).length === 0 && (
-                <option value="">Sin cámaras reales</option>
-              )}
-              {camaras
-                .filter((c) => !c.esDemo)
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nombre}
-                  </option>
-                ))}
-            </select>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={preguntaIa}
-                onChange={(e) => setPreguntaIa(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') void preguntarAOdysseus();
-                }}
-                placeholder="¿Hay alguien en caja?"
-                className="flex-1 bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500/50"
-              />
-              <Button
-                type="button"
-                disabled={preguntando}
-                onClick={() => void preguntarAOdysseus()}
-                className="h-9 w-9 shrink-0 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black"
-              >
-                <Send className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-
-          {/* D: Bitácora Visual — buscar en clips guardados + informe del día */}
-          <div className={cn('shrink-0 p-4 border-b border-white/5 space-y-2 bg-sky-500/5 overflow-y-auto', videoNube ? 'max-h-[70%]' : 'max-h-[40%]')}>
-            <p className="text-[9px] font-black uppercase tracking-widest text-sky-300 flex items-center gap-1.5">
-              <Search className="w-3.5 h-3.5" />
-              Buscar en la Bitácora Visual
-            </p>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={busquedaTexto}
-                onChange={(e) => setBusquedaTexto(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') void ejecutarBusquedaBitacora();
-                }}
-                placeholder="Ej: alguien en caja a las 3pm"
-                className="flex-1 bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500/50"
-              />
-              <Button
-                type="button"
-                disabled={buscandoClips}
-                onClick={() => void ejecutarBusquedaBitacora()}
-                className="h-9 w-9 shrink-0 rounded-lg bg-sky-500 hover:bg-sky-400 text-black"
-              >
-                <Search className="w-4 h-4" />
-              </Button>
-            </div>
-
-            {videoNube && (
-              <div className="space-y-1 rounded-lg bg-black p-2">
-                <p className="text-[11px] font-black text-white">{videoNube.titulo}</p>
-                <video src={videoNube.url} controls autoPlay className="w-full rounded-md bg-black max-h-48" />
+          {/* —— Chat —— */}
+          {pestanaBitacora === 'preguntar' && (
+            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 custom-scrollbar">
+              <div>
+                <p className="text-[15px] font-black text-white">Preguntar al centinela</p>
+                <p className="text-[12px] text-slate-400">Elige cámara y escribe en español.</p>
               </div>
-            )}
-
-            <Button
-              type="button"
-              disabled={cargandoNube}
-              onClick={() => void verGrabacionesNube()}
-              className="w-full h-9 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-[10px] font-black uppercase tracking-widest gap-1.5"
-            >
-              <Film className="w-3.5 h-3.5" />
-              {cargandoNube ? 'Cargando nube…' : 'Ver grabaciones en la nube'}
-            </Button>
-
-            {resultadosBusqueda.length > 0 && (
-              <div className="space-y-1.5 pt-1">
-                {resultadosBusqueda.map((clip) => (
-                  <button
-                    key={clip.id}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-cyan-300/90">Cámara</label>
+                <select
+                  value={camaraPreguntaId}
+                  onChange={(e) => setCamaraPreguntaId(e.target.value)}
+                  className="w-full bg-black/40 border border-cyan-500/20 focus:border-cyan-400/50 rounded-2xl px-3.5 py-3 text-sm text-white outline-none"
+                >
+                  {camaras.filter((c) => !c.esDemo).length === 0 && (
+                    <option value="">Sin cámaras reales</option>
+                  )}
+                  {camaras
+                    .filter((c) => !c.esDemo)
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nombre}
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-cyan-300/90">Tu pregunta</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={preguntaIa}
+                    onChange={(e) => setPreguntaIa(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') void preguntarAOdysseus();
+                    }}
+                    placeholder="¿Hay alguien en caja?"
+                    className="flex-1 bg-black/40 border border-cyan-500/20 focus:border-cyan-400/50 rounded-2xl px-3.5 py-3 text-sm text-white outline-none"
+                  />
+                  <Button
                     type="button"
-                    onClick={() => void abrirClipBitacora(clip)}
-                    className="w-full text-left p-2 rounded-lg bg-black/30 hover:bg-black/50 border border-white/5 transition-colors"
+                    disabled={preguntando}
+                    onClick={() => void preguntarAOdysseus()}
+                    className="h-12 px-4 rounded-2xl bg-gradient-to-r from-cyan-400 to-emerald-500 hover:opacity-90 text-black font-black"
                   >
-                    <p className="text-[11px] font-black text-white">
-                      {clip.trabajador_id || 'Sin trabajador'} · {clip.clasificacion || 'sin situación'}
-                    </p>
-                    <p className="text-[9px] font-black uppercase tracking-widest text-sky-300">
-                      {new Date(clip.capturado_en).toLocaleString('es-CO', { hour12: false })} ·{' '}
-                      {clip.camara_nombre || clip.camara_id}
-                    </p>
-                    <p className="text-[11px] text-white mt-0.5 line-clamp-2">
-                      {clip.descripcion_ia || 'Sin analizar todavía'}
-                    </p>
-                    {ventas.length > 0 && (
-                      <p className="text-[9px] text-slate-500 mt-0.5">
-                        {(() => {
-                          const n = ventasCercanas(clip.capturado_en, ventas).length;
-                          return n ? `${n} venta(s) registradas en ese momento` : 'Sin ventas registradas en ese momento';
-                        })()}
-                      </p>
-                    )}
-                  </button>
-                ))}
+                    <Send className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
-            )}
+            </div>
+          )}
 
-            <Button
-              type="button"
-              disabled={generandoInforme}
-              onClick={() => void generarInformeDelDia()}
-              className="w-full h-9 rounded-lg bg-black/40 hover:bg-black/60 border border-white/10 text-slate-200 text-[10px] font-black uppercase tracking-widest gap-1.5"
-            >
-              <FileText className="w-3.5 h-3.5" />
-              {generandoInforme ? 'Generando informe…' : 'Informe del día'}
-            </Button>
-          </div>
+          {/* —— Videos —— */}
+          {pestanaBitacora === 'grabaciones' && (
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+              <div className="shrink-0 px-3 pt-3 pb-2 space-y-2.5 border-b border-white/10">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[13px] font-black text-white">Lista</p>
+                  <button
+                    type="button"
+                    disabled={cargandoNube}
+                    onClick={() => void abrirCarpetaUI(carpetaActiva)}
+                    className="text-[11px] font-bold text-cyan-300 hover:text-cyan-200"
+                  >
+                    Actualizar
+                  </button>
+                </div>
+                <div className="flex gap-1 overflow-x-auto pb-0.5 custom-scrollbar">
+                  {(
+                    [
+                      { id: 'todas' as const, label: 'Todas', cls: 'border-sky-400/40 text-sky-100 bg-sky-500/15', n: conteoCarpetas.todas },
+                      { id: 'sospechoso' as const, label: 'Sospechoso', cls: 'border-orange-400/40 text-orange-100 bg-orange-500/15', n: conteoCarpetas.sospechoso },
+                      { id: 'evidencia' as const, label: 'Evidencia', cls: 'border-amber-400/40 text-amber-100 bg-amber-500/15', n: conteoCarpetas.evidencia },
+                      { id: 'cuarentena' as const, label: 'Cuarentena', cls: 'border-rose-400/40 text-rose-100 bg-rose-500/15', n: conteoCarpetas.cuarentena },
+                    ] as const
+                  ).map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      disabled={cargandoNube}
+                      onClick={() => void abrirCarpetaUI(c.id)}
+                      className={cn(
+                        'shrink-0 rounded-full px-3 py-1.5 text-[11px] font-black border transition-all inline-flex items-center gap-1.5',
+                        c.cls,
+                        carpetaActiva === c.id ? 'ring-2 ring-white/40 scale-105' : 'opacity-70 hover:opacity-100'
+                      )}
+                    >
+                      {c.label}
+                      <span className="text-[10px] font-bold opacity-80 tabular-nums">{c.n}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-1.5">
+                  <input
+                    type="text"
+                    value={busquedaTexto}
+                    onChange={(e) => setBusquedaTexto(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') void ejecutarBusquedaBitacora();
+                    }}
+                    placeholder="Buscar…"
+                    className="flex-1 bg-black/40 border border-white/15 focus:border-cyan-400/50 rounded-xl px-3 py-2 text-[12px] text-white outline-none"
+                  />
+                  <Button
+                    type="button"
+                    disabled={buscandoClips}
+                    onClick={() => void ejecutarBusquedaBitacora()}
+                    className="h-9 w-9 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black"
+                  >
+                    <Search className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1.5 custom-scrollbar">
+                {cargandoNube && (
+                  <p className="text-center text-xs text-cyan-200/70 py-8 animate-pulse">Cargando…</p>
+                )}
+                {!cargandoNube && resultadosBusqueda.length === 0 && (
+                  <div className="text-center py-6 px-3 rounded-2xl border border-dashed border-cyan-500/25 bg-cyan-500/5 space-y-3">
+                    <p className="text-[12px] font-bold text-slate-200">
+                      {carpetaActiva === 'todas' ? 'Sin videos aún' : 'Esta carpeta está vacía'}
+                    </p>
+                    <p className="text-[10px] text-slate-400 leading-snug">
+                      {carpetaActiva === 'todas'
+                        ? 'Activa «Grabar bitácora» en el PC del local.'
+                        : 'Sospechoso / Evidencia / Cuarentena se llenan con el Escaneo o alertas de IA.'}
+                    </p>
+                    {carpetaActiva !== 'todas' && (
+                      <Button
+                        type="button"
+                        onClick={() => void abrirCarpetaUI('todas')}
+                        className="h-10 w-full rounded-xl bg-gradient-to-r from-cyan-400 to-emerald-500 text-black font-black text-xs"
+                      >
+                        Ver Todas ({conteoCarpetas.todas || '…'} videos)
+                      </Button>
+                    )}
+                  </div>
+                )}
+                {resultadosBusqueda.map((clip) => {
+                  const grave =
+                    clip.clasificacion === 'malo' ||
+                    (clip.categorias_detectadas || []).some((x) =>
+                      ['robo', 'plata_bolsillo', 'escondite_gaveta', 'devolucion_simulada'].includes(String(x))
+                    );
+                  const activo = videoNube?.clip?.id === clip.id;
+                  return (
+                    <button
+                      key={clip.id}
+                      type="button"
+                      onClick={() => void abrirClipBitacora(clip)}
+                      className={cn(
+                        'w-full text-left rounded-xl border overflow-hidden transition-all',
+                        activo
+                          ? 'bg-cyan-500/15 border-cyan-400/50'
+                          : 'bg-white/[0.03] border-white/10 hover:bg-white/[0.07] hover:border-cyan-400/25'
+                      )}
+                    >
+                      <div className="flex items-stretch">
+                        <div
+                          className={cn(
+                            'w-1 shrink-0',
+                            grave ? 'bg-rose-500' : clip.alerta ? 'bg-amber-400' : 'bg-cyan-500/50'
+                          )}
+                        />
+                        <div className="p-2.5 min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <Play className={cn('w-3.5 h-3.5 shrink-0', activo ? 'text-cyan-300' : 'text-slate-500')} />
+                            <p className="text-[12px] font-bold text-white truncate flex-1">
+                              {clip.camara_nombre || clip.camara_id}
+                            </p>
+                            {clip.alerta && (
+                              <span className="text-[8px] font-black uppercase text-rose-300">!</span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-cyan-300/80 mt-0.5 pl-5">
+                            {new Date(clip.capturado_en).toLocaleString('es-CO', {
+                              hour12: false,
+                              day: '2-digit',
+                              month: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </p>
+                          <p className="text-[11px] text-slate-400 mt-1 pl-5 line-clamp-1">
+                            {clip.descripcion_ia || 'Sin analizar'}
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
-          <div className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
-            {!odysseusActivo && bitacora.length === 0 && (
-              <div className="text-center py-10 opacity-30">
-                <Eye className="w-10 h-10 text-slate-400 mx-auto mb-3" />
-                <p className="text-xs font-black uppercase">IA en reposo</p>
-                <p className="text-[10px] mt-2 px-4 normal-case tracking-normal opacity-80">
-                  Activa ODYSSEUS, configura alertas o pregúntale arriba.
+          {/* —— Escaneo —— */}
+          {pestanaBitacora === 'escaneo' && (
+            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 custom-scrollbar">
+              <div>
+                <p className="text-[15px] font-black text-white">Forense DVR (grabaciones viejas)</p>
+                <p className="text-[12px] text-slate-400 mt-1 leading-relaxed">
+                  La IA busca según las reglas. En el DVR (7 / 14 / 21 días) y en los videos ya
+                  guardados en D:\DulcePlacerEvidencia. Tú borras lo que no sea sospechoso. Carpetas:{' '}
+                  <span className="text-orange-300 font-semibold">Sospechoso</span> →{' '}
+                  <span className="text-amber-300 font-semibold">Evidencia</span> →{' '}
+                  <span className="text-rose-300 font-semibold">Cuarentena</span>.
                 </p>
               </div>
-            )}
 
-            {bitacora.map((log) => (
+              <div className="rounded-2xl border border-white/10 bg-black/40 p-3 space-y-1.5 max-h-36 overflow-y-auto custom-scrollbar">
+                <p className="text-[10px] font-black uppercase tracking-wider text-amber-300/90">
+                  Reglas forenses ({REGLAS_FORENSES_DVR.length})
+                </p>
+                {REGLAS_FORENSES_DVR.map((r) => (
+                  <p key={r.id} className="text-[10px] text-slate-400 leading-snug">
+                    <span className="text-slate-200 font-semibold">{r.label}</span> — {r.detalle}
+                  </p>
+                ))}
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[11px] font-black uppercase tracking-wider text-cyan-300 flex items-center gap-1.5">
+                    <HardDrive className="w-3.5 h-3.5" /> DVR
+                  </p>
+                  {infoDvr ? (
+                    <span className="text-[10px] text-emerald-300 font-bold truncate">✓ {infoDvr}</span>
+                  ) : (
+                    <span className="text-[10px] text-slate-500">Se conecta al escanear</span>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  disabled={!puedeGestionar || escaneandoRegreso}
+                  onClick={() => void conectarDvr()}
+                  className="w-full h-9 rounded-xl bg-white/90 text-black hover:bg-white font-bold text-xs"
+                >
+                  {infoDvr ? 'Reconectar' : 'Probar conexión DVR'}
+                </Button>
+              </div>
+
+              <div className="rounded-2xl border border-amber-400/30 bg-amber-500/[0.07] p-3 space-y-2">
+                <p className="text-[11px] font-black uppercase tracking-wider text-amber-300">Rango</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {([7, 14, 21] as const).map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      disabled={escaneandoRegreso}
+                      onClick={() => setDiasEscaneo(d)}
+                      className={cn(
+                        'rounded-2xl py-3 text-sm font-black transition-all',
+                        diasEscaneo === d
+                          ? 'bg-amber-400 text-black shadow-lg shadow-amber-500/30'
+                          : 'bg-black/35 text-slate-300 hover:bg-black/50'
+                      )}
+                    >
+                      {d}
+                      <span className="block text-[10px] font-semibold opacity-80">días</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-rose-400/35 bg-rose-500/[0.08] p-3 space-y-2">
+                {progresoEscaneo && (
+                  <p className="text-[12px] text-rose-100 font-semibold animate-pulse">{progresoEscaneo}</p>
+                )}
+                <Button
+                  type="button"
+                  disabled={!puedeGestionar || escaneandoRegreso}
+                  onClick={() => void escaneoAlRegresar(diasEscaneo)}
+                  className="w-full h-12 rounded-2xl bg-gradient-to-r from-amber-400 to-rose-500 hover:opacity-95 text-black font-black text-sm shadow-lg shadow-rose-900/30"
+                >
+                  {escaneandoRegreso
+                    ? 'Revisando con las reglas…'
+                    : `Forense: últimos ${diasEscaneo} días en disco`}
+                </Button>
+                <Button
+                  type="button"
+                  disabled={!puedeGestionar || escaneandoRegreso}
+                  onClick={() => void revisarVideosDisco()}
+                  className="w-full h-10 rounded-2xl bg-cyan-500/20 border border-cyan-400/40 text-cyan-100 font-bold text-xs"
+                >
+                  Revisar videos de D:\ con las reglas
+                </Button>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(
+                    [
+                      { id: 'sospechoso' as const, label: 'Sospechoso' },
+                      { id: 'evidencia' as const, label: 'Evidencia' },
+                      { id: 'cuarentena' as const, label: 'Cuarentena' },
+                    ] as const
+                  ).map((b) => (
+                    <Button
+                      key={b.id}
+                      type="button"
+                      onClick={() => {
+                        setPestanaBitacora('grabaciones');
+                        void abrirCarpetaUI(b.id);
+                      }}
+                      className="h-9 rounded-xl bg-black/40 border border-white/10 text-white text-[10px] font-bold"
+                    >
+                      {b.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Diario en vivo: se ve que el puente sí trabaja */}
+              <div className="rounded-2xl border border-cyan-500/20 bg-black/50 p-3 min-h-[8rem]">
+                <p className="text-[10px] font-black uppercase tracking-wider text-cyan-300/90 mb-2">
+                  Diario forense (disco DVR)
+                </p>
+                {diarioEscaneo.length === 0 ? (
+                  <p className="text-[11px] text-slate-500">
+                    Al pulsar Forense verás cada fotograma del disco y cada hallazgo con fecha.
+                  </p>
+                ) : (
+                  <div className="max-h-48 overflow-y-auto space-y-1 custom-scrollbar">
+                    {diarioEscaneo.map((l, i) => (
+                      <p key={`${i}-${l.slice(0, 20)}`} className="text-[10px] text-slate-300 leading-snug font-mono">
+                        {l}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Pie: en Videos se reduce para no tapar la lista */}
+          <div className="shrink-0 border-t border-white/10 px-3 py-2 space-y-1.5 bg-black/60 backdrop-blur-md">
+            {pestanaBitacora !== 'grabaciones' && (
+              <Button
+                type="button"
+                disabled={generandoInforme}
+                onClick={() => void generarInformeDelDia()}
+                className="w-full h-10 rounded-2xl border border-cyan-500/25 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-100 text-xs font-bold gap-2"
+              >
+                <FileText className="w-4 h-4" />
+                {generandoInforme ? 'Generando…' : 'Informe del día'}
+              </Button>
+            )}
+            {bitacora.length > 0 && (
               <div
-                key={log.id}
                 className={cn(
-                  'p-4 rounded-2xl border text-[13px] leading-relaxed transition-all animate-ag-fade-in',
-                  log.alerta
-                    ? 'bg-red-500/10 border-red-500/30 text-red-200'
-                    : 'bg-white/5 border-white/5 text-slate-300 hover:bg-white/10'
+                  'overflow-y-auto space-y-1 custom-scrollbar',
+                  pestanaBitacora === 'grabaciones' ? 'max-h-12' : 'max-h-24'
                 )}
               >
-                <div className="flex items-center gap-2 mb-2 opacity-60">
-                  {log.alerta ? (
-                    <ShieldAlert className="w-4 h-4 text-red-400" />
-                  ) : (
-                    <Search className="w-4 h-4 text-emerald-400" />
-                  )}
-                  <span className="text-[10px] font-black uppercase tracking-widest">
-                    {log.tiempo.toLocaleTimeString()}
-                  </span>
-                </div>
-                <p className="font-bold">{log.mensaje}</p>
+                {bitacora.slice(0, pestanaBitacora === 'grabaciones' ? 2 : 5).map((log) => (
+                  <div
+                    key={log.id}
+                    className={cn(
+                      'px-2.5 py-1.5 rounded-xl text-[10px] leading-snug border',
+                      log.alerta
+                        ? 'bg-rose-500/10 border-rose-500/25 text-rose-200'
+                        : 'bg-white/[0.03] border-white/5 text-slate-400'
+                    )}
+                  >
+                    <span className="opacity-60 mr-1 font-mono">
+                      {log.tiempo.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    {log.mensaje.length > 70 ? `${log.mensaje.slice(0, 70)}…` : log.mensaje}
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
         </div>
       </div>

@@ -46,7 +46,7 @@ import { PrePedidoModal } from '@/components/prepedidos/PrePedidoModal';
 import { PrePedidoAddItemModal } from '@/components/prepedidos/PrePedidoAddItemModal';
 import { ProveedorCatalogoTactico } from '@/components/prepedidos/ProveedorCatalogoTactico';
 import { ComparadorPrecios } from '@/components/prepedidos/ComparadorPrecios';
-import type { PrePedido, Producto, Proveedor, PrecioProveedor, InventarioItem, OrdenProduccion, Receta } from '@/types';
+import type { PrePedido, Producto, Proveedor, PrecioProveedor, InventarioItem, OrdenProduccion, Receta, Categoria } from '@/types';
 
 // Convierte cualquier fecha (string ISO, timestamp numérico, Date) a string legible sin lanzar excepción
 const safeDate = (val: string | number | undefined | null, opts?: Intl.DateTimeFormatOptions): string => {
@@ -98,6 +98,8 @@ interface PrePedidosProps {
   onNavigateToRecepciones?: () => void;
   addOrUpdatePrecio?: (precio: Omit<PrecioProveedor, 'id'>) => void;
   removePrecioFromCatalogo?: (precioId: string) => void;
+  onAddProducto?: (producto: Omit<Producto, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Producto | null | void>;
+  categorias?: Categoria[];
 }
 
 export default function PrePedidos({
@@ -124,12 +126,17 @@ export default function PrePedidos({
   onGenerarSugerencias,
   onNavigateToRecepciones,
   addOrUpdatePrecio,
-  removePrecioFromCatalogo
+  removePrecioFromCatalogo,
+  onAddProducto,
+  categorias = [],
 }: PrePedidosProps) {
   const [activeTab, setActiveTab] = useState<'creacion' | 'gestion' | 'comparador'>('creacion');
   const [confirmarLimpiar, setConfirmarLimpiar] = useState(false);
   const [fechaEntrega, setFechaEntrega] = useState('');
   const [filtroEstado, setFiltroEstado] = useState<'todos' | PrePedido['estado']>('todos');
+  // Rango de fechas para encontrar pedidos viejos (por la fecha en que se creó el pedido).
+  const [filtroPedidoDesde, setFiltroPedidoDesde] = useState('');
+  const [filtroPedidoHasta, setFiltroPedidoHasta] = useState('');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
   const [selectedPrePedido, setSelectedPrePedido] = useState<PrePedido | null>(null);
@@ -152,6 +159,8 @@ export default function PrePedidos({
   const [showProveedorPanel, setShowProveedorPanel] = useState(false); // ✅ NUEVO: Panel de proveedor abierto
   const [searchProveedorText, setSearchProveedorText] = useState(''); // ✅ NUEVO: Buscador de proveedores
   const [mobileView, setMobileView] = useState<'catalogo' | 'ticket'>('catalogo');
+  const [lineaPrecioId, setLineaPrecioId] = useState<string | null>(null);
+  const [lineaPrecioValor, setLineaPrecioValor] = useState('');
 
   // Estados para la vista de Cuenta
   const [panelView, setPanelView] = useState<'ticket' | 'cuenta'>('ticket');
@@ -483,6 +492,38 @@ export default function PrePedidos({
     }
   };
 
+  const guardarPrecioLinea = async (itemId: string) => {
+    if (!activeDraft) return;
+    const precio = Math.round(Number(lineaPrecioValor) * 100) / 100;
+    setLineaPrecioId(null);
+    if (!Number.isFinite(precio) || precio <= 0) {
+      toast.error('Escribe un precio mayor que cero');
+      return;
+    }
+    const item = activeDraft.items.find(i => i.id === itemId);
+    if (!item || item.precioUnitario === precio) return;
+    const items = activeDraft.items.map(i => {
+      if (i.id !== itemId) return i;
+      const subtotal = Math.round(i.cantidad * precio * 100) / 100;
+      return { ...i, precioUnitario: precio, subtotal };
+    });
+    const total = Math.round(items.reduce((s, i) => s + (i.subtotal || i.cantidad * i.precioUnitario), 0) * 100) / 100;
+    onUpdatePrePedido(activeDraft.id, { items, total });
+    const pp = precios.find(p => p.productoId === item.productoId && p.proveedorId === activeDraft.proveedorId);
+    if (addOrUpdatePrecio) {
+      await addOrUpdatePrecio({
+        productoId: item.productoId,
+        proveedorId: activeDraft.proveedorId,
+        precioCosto: precio,
+        tipoEmbalaje: pp?.tipoEmbalaje,
+        cantidadEmbalaje: pp?.cantidadEmbalaje,
+        destino: pp?.destino,
+        notas: pp?.notas,
+      });
+      toast.success('Precio actualizado en el pedido y en el catálogo del proveedor');
+    }
+  };
+
   const handleShareWhatsApp = () => {
     const draft = activeDraft;
     if (!draft || draft.items.length === 0) {
@@ -630,11 +671,48 @@ export default function PrePedidos({
             );
           })()}
 
+          {/* Buscar pedidos por rango de fechas (para encontrar los viejos) */}
+          {prepedidos.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1">
+                <Calendar className="w-3 h-3 text-indigo-500" /> Entre fechas del pedido:
+              </span>
+              <input
+                type="date"
+                aria-label="Desde"
+                value={filtroPedidoDesde}
+                onChange={e => setFiltroPedidoDesde(e.target.value)}
+                className="h-9 px-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-700 dark:text-slate-200 outline-none"
+              />
+              <span className="text-[10px] font-black text-slate-400">hasta</span>
+              <input
+                type="date"
+                aria-label="Hasta"
+                value={filtroPedidoHasta}
+                onChange={e => setFiltroPedidoHasta(e.target.value)}
+                className="h-9 px-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-700 dark:text-slate-200 outline-none"
+              />
+              {(filtroPedidoDesde || filtroPedidoHasta) && (
+                <button
+                  type="button"
+                  onClick={() => { setFiltroPedidoDesde(''); setFiltroPedidoHasta(''); }}
+                  className="h-9 px-3 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest"
+                >
+                  Limpiar fechas
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Grid de pedidos */}
           {(() => {
-            const pedidosFiltrados = filtroEstado === 'todos'
-              ? prepedidos
-              : prepedidos.filter(p => p.estado === filtroEstado);
+            const pedidosFiltrados = prepedidos.filter(p => {
+              if (filtroEstado !== 'todos' && p.estado !== filtroEstado) return false;
+              const dia = (p.fechaCreacion || '').slice(0, 10);
+              if (filtroPedidoDesde && dia && dia < filtroPedidoDesde) return false;
+              if (filtroPedidoHasta && dia && dia > filtroPedidoHasta) return false;
+              return true;
+            });
 
             return pedidosFiltrados.length === 0 ? (
             <div className="text-center py-24 text-slate-400">
@@ -963,6 +1041,8 @@ export default function PrePedidos({
               draftItems={activeDraft?.items?.map(i => ({ productoId: i.productoId, cantidad: i.cantidad })) ?? []}
               addOrUpdatePrecio={addOrUpdatePrecio}
               removePrecioFromCatalogo={removePrecioFromCatalogo}
+              onAddProducto={onAddProducto}
+              categorias={categorias}
             />
           </div>
         ) : (
@@ -1148,9 +1228,41 @@ export default function PrePedidos({
                               <Plus className="w-3 h-3" />
                             </button>
                           </div>
-                          <span className="font-black text-sm text-indigo-600 tabular-nums">
-                            {formatCurrency(item.cantidad * item.precioUnitario)}
-                          </span>
+                          <div className="flex flex-col items-end gap-1">
+                            {lineaPrecioId === item.id ? (
+                              <Input
+                                type="number"
+                                inputMode="decimal"
+                                autoFocus
+                                value={lineaPrecioValor}
+                                onChange={e => setLineaPrecioValor(e.target.value)}
+                                onBlur={() => guardarPrecioLinea(item.id)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    guardarPrecioLinea(item.id);
+                                  }
+                                }}
+                                className="h-8 w-24 text-right font-black text-sm"
+                              />
+                            ) : (
+                              <button
+                                type="button"
+                                title="Editar precio. Se guarda en el catálogo de este proveedor"
+                                onClick={() => {
+                                  setLineaPrecioId(item.id);
+                                  setLineaPrecioValor(String(item.precioUnitario));
+                                }}
+                                className="text-[11px] font-black text-slate-600 tabular-nums border-b border-dashed border-slate-300"
+                              >
+                                <Edit3 className="w-3 h-3 inline mr-1" />
+                                {formatCurrency(item.precioUnitario)} c/u
+                              </button>
+                            )}
+                            <span className="font-black text-sm text-indigo-600 tabular-nums">
+                              {formatCurrency(item.cantidad * item.precioUnitario)}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     );

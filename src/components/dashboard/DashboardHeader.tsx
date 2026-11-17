@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShoppingCart, Package, ClipboardCheck, Users, Warehouse, Banknote, Receipt, ClipboardList, Store } from 'lucide-react';
+import { ShoppingCart, Package, ClipboardCheck, Users, Warehouse, Banknote, Receipt, ClipboardList, Store, CalendarClock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface DashboardHeaderProps {
@@ -12,9 +12,11 @@ interface DashboardHeaderProps {
     onViewGastos?: () => void;
     onViewPrePedidos?: () => void;
     onViewMayoristas?: () => void;
+    /** Abre el panel del Horario de la tienda (también lo ven las vendedoras, en solo lectura). */
+    onVerHorario?: () => void;
 }
 
-export function DashboardHeader({ onViewVentas, onViewProductos, onViewRecepciones, onViewNomina, onViewBoveda, onViewCaja, onViewGastos, onViewPrePedidos, onViewMayoristas }: DashboardHeaderProps) {
+export function DashboardHeader({ onViewVentas, onViewProductos, onViewRecepciones, onViewNomina, onViewBoveda, onViewCaja, onViewGastos, onViewPrePedidos, onViewMayoristas, onVerHorario }: DashboardHeaderProps) {
     return (
         <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8">
             <div>
@@ -69,6 +71,16 @@ export function DashboardHeader({ onViewVentas, onViewProductos, onViewRecepcion
                     <ClipboardCheck className="w-4 h-4" />
                     Recepciones
                 </Button>
+                {onVerHorario && (
+                    <Button
+                        onClick={onVerHorario}
+                        variant="outline"
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold border-slate-200 dark:border-slate-700 hover:border-rose-500 hover:text-rose-500 transition-all h-11"
+                    >
+                        <CalendarClock className="w-4 h-4" />
+                        Horario
+                    </Button>
+                )}
                 {onViewNomina && (
                     <Button
                         onClick={onViewNomina}

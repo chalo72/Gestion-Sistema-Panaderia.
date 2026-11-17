@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Search,
   Store,
@@ -24,8 +25,11 @@ import type {
   PrecioProveedor,
   InventarioItem,
   OrdenProduccion,
-  Receta
+  Receta,
+  Categoria
 } from '@/types';
+import { MarcaPrecioModificado } from '@/components/precios/MarcaPrecioModificado';
+import { ultimoCambioPrecio, useCambiosPrecio } from '@/lib/cambio-precio-catalogo';
 
 // insumos: tipo==='ingrediente' | cat ins: | destino==='insumo' del PrecioProveedor
 type ZoneFilter = 'ambas' | 'insumos' | 'ventas';
@@ -45,6 +49,8 @@ interface ProveedorCatalogoTacticoProps {
   draftItems?: { productoId: string; cantidad: number }[];
   addOrUpdatePrecio?: (precio: Omit<PrecioProveedor, 'id'>) => void;
   removePrecioFromCatalogo?: (precioId: string) => void;
+  onAddProducto?: (producto: Omit<Producto, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Producto | null | void>;
+  categorias?: Categoria[];
 }
 
 const esInsumo = (p: any): boolean => {
@@ -68,12 +74,25 @@ export function ProveedorCatalogoTactico({
   draftItems = [],
   addOrUpdatePrecio,
   removePrecioFromCatalogo,
+  onAddProducto,
+  categorias = [],
 }: ProveedorCatalogoTacticoProps) {
   const [search, setSearch] = useState('');
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [addingIds, setAddingIds] = useState<Set<string>>(new Set());
   const [selectedProvId, setSelectedProvId] = useState<string | null>(activeProveedorId);
   const [zoneFilter, setZoneFilter] = useState<ZoneFilter>('ambas');
+  const [creandoProducto, setCreandoProducto] = useState(false);
+  const [guardandoProducto, setGuardandoProducto] = useState(false);
+  const [formNuevo, setFormNuevo] = useState({
+    nombre: '',
+    precio: '',
+    destino: 'venta' as 'venta' | 'insumo',
+    categoria: '',
+    tipoEmbalaje: 'unidad',
+    cantidadEmbalaje: '1',
+  });
+  const historial = useCambiosPrecio(precios);
 
   const refInsumos = useRef<HTMLDivElement>(null);
   const refVentas  = useRef<HTMLDivElement>(null);
@@ -122,7 +141,8 @@ export function ProveedorCatalogoTactico({
           stockMinimo,
           necesidadProduccion: necesidadProd,
           necesidadTotal: Math.ceil(Math.max(0, (stockMinimo * 2) + necesidadProd - stockActual)),
-          esCritico
+          esCritico,
+          ultimoCambio: ultimoCambioPrecio(historial, pr.productoId, prov.id),
         };
       });
 
@@ -132,7 +152,7 @@ export function ProveedorCatalogoTactico({
         itemsCriticos: productosProv.filter(p => p.esCritico).length
       };
     });
-  }, [proveedores, precios, productos, inventario, necesidadesProduccion, recetas]);
+  }, [proveedores, precios, productos, inventario, necesidadesProduccion, recetas, historial]);
 
   const activeProveedor = stats.find(s => s.id === (selectedProvId || activeProveedorId))
     || stats.find(s => s.productos.length > 0)
@@ -179,6 +199,86 @@ export function ProveedorCatalogoTactico({
     }, 1000);
   };
 
+  const nombresCategoria = useMemo(() => {
+    const desdeConfig = categorias.map(c => c.nombre).filter(Boolean);
+    if (desdeConfig.length > 0) return desdeConfig;
+    return [...new Set(productos.map(p => p.categoria).filter(Boolean))];
+  }, [categorias, productos]);
+
+  const abrirCrearProducto = () => {
+    setFormNuevo({
+      nombre: '',
+      precio: '',
+      destino: 'venta',
+      categoria: nombresCategoria[0] || '',
+      tipoEmbalaje: 'unidad',
+      cantidadEmbalaje: '1',
+    });
+    setCreandoProducto(true);
+  };
+
+  const guardarProductoNuevo = async () => {
+    if (!activeProveedor || !addOrUpdatePrecio || !onAddProducto) {
+      toast.error('No se puede crear el producto en este momento');
+      return;
+    }
+    const nombre = formNuevo.nombre.trim();
+    const precio = Math.round(Number(formNuevo.precio) * 100) / 100;
+    const cantidadEmbalaje = Math.max(1, Math.round(Number(formNuevo.cantidadEmbalaje) || 1));
+    const categoria = formNuevo.categoria.trim();
+    if (!nombre) {
+      toast.error('Escribe el nombre del producto');
+      return;
+    }
+    if (!Number.isFinite(precio) || precio <= 0) {
+      toast.error('Escribe el precio de costo');
+      return;
+    }
+    if (!categoria) {
+      toast.error('Elige la categoría');
+      return;
+    }
+    const yaExiste = productos.find(p => p.nombre.trim().toLowerCase() === nombre.toLowerCase());
+    setGuardandoProducto(true);
+    try {
+      let productoId = yaExiste?.id;
+      if (!productoId) {
+        const costoUnitario = Math.round((precio / cantidadEmbalaje) * 100) / 100;
+        const creado = await onAddProducto({
+          nombre,
+          categoria,
+          precioVenta: 0,
+          margenUtilidad: 0,
+          tipo: formNuevo.destino === 'insumo' ? 'ingrediente' : 'elaborado',
+          costoBase: costoUnitario,
+        });
+        productoId = creado && typeof creado === 'object' ? creado.id : undefined;
+      }
+      if (!productoId) {
+        toast.error(yaExiste ? 'No se pudo enlazar el producto' : 'No se pudo crear el producto');
+        return;
+      }
+      await addOrUpdatePrecio({
+        productoId,
+        proveedorId: activeProveedor.id,
+        precioCosto: precio,
+        destino: formNuevo.destino,
+        tipoEmbalaje: formNuevo.tipoEmbalaje,
+        cantidadEmbalaje,
+      });
+      toast.success(
+        yaExiste
+          ? `${nombre} ya existía. Quedó en el catálogo de ${activeProveedor.nombre}`
+          : `${nombre} creado en el catálogo de ${activeProveedor.nombre}`
+      );
+      setCreandoProducto(false);
+    } catch {
+      toast.error('No se pudo guardar el producto');
+    } finally {
+      setGuardandoProducto(false);
+    }
+  };
+
   if (!activeProveedor) return null;
 
   const totalEnCarrito = draftItems.reduce((s, i) => s + i.cantidad, 0);
@@ -197,17 +297,22 @@ export function ProveedorCatalogoTactico({
 
     const handleSavePrecio = () => {
         setIsEditingPrecio(false);
-        if (editPrecio !== prod.precioCosto && addOrUpdatePrecio) {
+        const precio = Math.round(Number(editPrecio) * 100) / 100;
+        if (!Number.isFinite(precio) || precio <= 0) {
+            toast.error('Escribe un precio mayor que cero');
+            setEditPrecio(prod.precioCosto || 0);
+            return;
+        }
+        if (precio !== prod.precioCosto && addOrUpdatePrecio) {
             addOrUpdatePrecio({
                 productoId: prod.id,
                 proveedorId: activeProveedor.id,
-                precioCosto: editPrecio,
+                precioCosto: precio,
                 tipoEmbalaje: prod.tipoEmbalaje,
                 cantidadEmbalaje: prod.cantidadEmbalaje,
                 destino: prod.destino,
-                is_primary: true
             });
-            toast.success(`Precio de ${prod.nombre} actualizado en el catálogo`);
+            toast.success(`Precio de ${prod.nombre} actualizado en el catálogo de ${activeProveedor.nombre}`);
         }
     };
 
@@ -241,7 +346,7 @@ export function ProveedorCatalogoTactico({
 
         <CardContent className="pl-4 pr-3 py-3 flex flex-col flex-1 gap-2 relative group">
           <div className="flex justify-between items-start gap-1">
-            <h4 className={cn('font-black uppercase text-xs sm:text-[13px] tracking-tight text-slate-900 dark:text-slate-100 leading-snug line-clamp-2 min-h-[36px]', enCarrito && 'pr-10')}>
+            <h4 title={prod.nombre} className={cn('font-black uppercase text-[11px] sm:text-xs tracking-tight text-slate-900 dark:text-slate-100 leading-snug break-words', enCarrito && 'pr-10')}>
               {prod.nombre}
             </h4>
             {removePrecioFromCatalogo && (prod as any).precioId && (
@@ -289,6 +394,7 @@ export function ProveedorCatalogoTactico({
                 {formatCurrency(prod.precioCosto || 0)}
               </span>
             )}
+            <MarcaPrecioModificado cambio={prod.ultimoCambio ?? null} />
             <div className="flex flex-wrap gap-1 items-center mt-1">
               <span className={cn('text-[9px] font-black uppercase px-1.5 py-0.5 rounded border',
                 prod.esCritico
@@ -388,7 +494,7 @@ export function ProveedorCatalogoTactico({
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
           {items.map(prod => <ProductoCard key={prod.id} prod={prod} isInsumo={isInsumo} />)}
         </div>
       )}
@@ -416,6 +522,14 @@ export function ProveedorCatalogoTactico({
               {catalogoInsumos.length + catalogoVentas.length} productos
             </p>
           </div>
+          <Button
+            type="button"
+            onClick={abrirCrearProducto}
+            className="h-9 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-wide gap-1 shrink-0"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Crear producto
+          </Button>
           {totalEnCarrito > 0 && (
             <div className="flex items-center gap-1 bg-emerald-600 text-white px-2 py-1 rounded-lg text-[10px] font-black shadow-sm shrink-0">
               <ShoppingCart className="w-3 h-3" />
@@ -573,6 +687,67 @@ export function ProveedorCatalogoTactico({
           </div>
         )}
       </div>
+      {creandoProducto && createPortal(
+        <div className="fixed inset-0 z-[80] bg-slate-950/60 flex items-end sm:items-center justify-center p-3" onClick={() => !guardandoProducto && setCreandoProducto(false)}>
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-4 space-y-3" onClick={e => e.stopPropagation()}>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600">Catálogo de {activeProveedor.nombre}</p>
+              <h3 className="text-base font-black text-slate-900 dark:text-white">Crear producto</h3>
+            </div>
+            <label className="block space-y-1">
+              <span className="text-[10px] font-black uppercase text-slate-500">Nombre</span>
+              <Input value={formNuevo.nombre} onChange={e => setFormNuevo(f => ({ ...f, nombre: e.target.value }))} placeholder="Ej. Harina de trigo" className="h-10 font-bold" />
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="block space-y-1">
+                <span className="text-[10px] font-black uppercase text-slate-500">Precio de costo</span>
+                <Input type="number" inputMode="decimal" value={formNuevo.precio} onChange={e => setFormNuevo(f => ({ ...f, precio: e.target.value }))} placeholder="0" className="h-10 font-black" />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-[10px] font-black uppercase text-slate-500">Uso</span>
+                <select value={formNuevo.destino} onChange={e => setFormNuevo(f => ({ ...f, destino: e.target.value as 'venta' | 'insumo' }))} className="w-full h-10 rounded-md border border-slate-200 bg-white px-2 text-sm font-bold text-slate-900">
+                  <option value="venta">Venta</option>
+                  <option value="insumo">Insumo</option>
+                </select>
+              </label>
+            </div>
+            <label className="block space-y-1">
+              <span className="text-[10px] font-black uppercase text-slate-500">Categoría</span>
+              {nombresCategoria.length > 0 ? (
+                <select value={formNuevo.categoria} onChange={e => setFormNuevo(f => ({ ...f, categoria: e.target.value }))} className="w-full h-10 rounded-md border border-slate-200 bg-white px-2 text-sm font-bold text-slate-900">
+                  {nombresCategoria.map(nombre => <option key={nombre} value={nombre}>{nombre}</option>)}
+                </select>
+              ) : (
+                <Input value={formNuevo.categoria} onChange={e => setFormNuevo(f => ({ ...f, categoria: e.target.value }))} placeholder="Categoría" className="h-10 font-bold" />
+              )}
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="block space-y-1">
+                <span className="text-[10px] font-black uppercase text-slate-500">Embalaje</span>
+                <select value={formNuevo.tipoEmbalaje} onChange={e => setFormNuevo(f => ({ ...f, tipoEmbalaje: e.target.value }))} className="w-full h-10 rounded-md border border-slate-200 bg-white px-2 text-sm font-bold text-slate-900">
+                  <option value="unidad">Unidad</option>
+                  <option value="paca">Paca</option>
+                  <option value="bulto">Bulto</option>
+                  <option value="caja">Caja</option>
+                  <option value="saco">Saco</option>
+                  <option value="bolsa">Bolsa</option>
+                </select>
+              </label>
+              <label className="block space-y-1">
+                <span className="text-[10px] font-black uppercase text-slate-500">Cantidad por embalaje</span>
+                <Input type="number" inputMode="numeric" value={formNuevo.cantidadEmbalaje} onChange={e => setFormNuevo(f => ({ ...f, cantidadEmbalaje: e.target.value }))} className="h-10 font-black" />
+              </label>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button type="button" variant="outline" className="flex-1 h-11 font-black" disabled={guardandoProducto} onClick={() => setCreandoProducto(false)}>Cancelar</Button>
+              <Button type="button" className="flex-1 h-11 font-black bg-indigo-600 hover:bg-indigo-700 text-white" disabled={guardandoProducto} onClick={guardarProductoNuevo}>
+                {guardandoProducto ? 'Guardando…' : 'Guardar en catálogo'}
+              </Button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

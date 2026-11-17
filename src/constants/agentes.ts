@@ -58,6 +58,17 @@ export const AGENTES_CONFIG: Record<AgenteId, { nombre: string; cargo: string; e
   nomina:       { nombre: 'NÓMINA & RRHH',   cargo: 'Personal / Quincena', emoji: '👥', color: 'text-[#87CEEB]', bg: 'bg-[#87CEEB]/10 border-[#87CEEB]/20', icon: Users, shadow: 'shadow-[#87CEEB]/20', misionPanaderia: 'Trabajadores, turnos, adelantos y nómina quincenal real.', plantillas: ['Preparar Quincena', 'Lista de Adelantos Pendientes', 'Turnos del Equipo'] },
   inversion:    { nombre: 'INVERSIÓN',      cargo: 'Analista Exced.',  emoji: '📈', color: 'text-[#10b981]', bg: 'bg-[#10b981]/10 border-[#10b981]/20', icon: TrendingUp, shadow: 'shadow-[#10b981]/20', misionPanaderia: 'Reinversión estratégica en maquinaria industrial eficiente.', plantillas: ['Análisis de Retorno de Inversión (Nuevo Horno)', 'Plan de Inversión de Excedentes Mensuales', 'Informe de Ahorro por Eficiencia Energética'] },
   contable:     { nombre: 'BANCO INTERNO',  cargo: 'Audit. Financ.',  emoji: '💰', color: 'text-[#C0C0C0]', bg: 'bg-[#C0C0C0]/10 border-[#C0C0C0]/20', icon: Wallet, shadow: 'shadow-[#C0C0C0]/20', misionPanaderia: 'Auditoría de flujo de caja para evitar fugas de dinero.', plantillas: ['Cierre de Caja y Conciliación Bancaria', 'Informe de Gastos no Operativos', 'Previsión de Flujo para el Próximo Mes'] },
+  'tesoreria-supervivencia': {
+    nombre: 'TESORERÍA SUPERVIVENCIA',
+    cargo: 'Crisis quincena',
+    emoji: '🆘',
+    color: 'text-rose-600',
+    bg: 'bg-rose-500/10 border-rose-500/30',
+    icon: ShieldAlert,
+    shadow: 'shadow-rose-500/30',
+    misionPanaderia: 'Priorizar nómina, servicios y proveedores antes que retiros de familia. Veredicto de supervivencia con números reales.',
+    plantillas: ['¿Alcanza esta quincena?', 'Fugas a la familia vs ventas', '3 acciones esta semana'],
+  },
   logistica:    { nombre: 'LOGÍSTICA',      cargo: 'Compras / OC',    emoji: '🚚', color: 'text-[#A855F7]', bg: 'bg-[#A855F7]/10 border-[#A855F7]/20', icon: Truck, shadow: 'shadow-[#A855F7]/20', misionPanaderia: 'Proveedores, órdenes de compra y recepciones según faltantes reales.', plantillas: ['Orden de Compra Prioritaria', 'Lista de Proveedores Activos', 'Checklist de Recepción'] },
   calidad:      { nombre: 'CALIDAD',        cargo: 'Auditor Sabor',   emoji: '🧼', color: 'text-[#84CC16]', bg: 'bg-[#84CC16]/10 border-[#84CC16]/20', icon: CheckCircle, shadow: 'shadow-[#84CC16]/20', misionPanaderia: 'Garantizar higiene y cumplimiento de normas de salud.', plantillas: ['Lista de Chequeo Sanitario para PDF', 'Auditoría de Insumos Orgánicos', 'Informe de Quejas de Sabor y Color'] },
   mantenimiento:{ nombre: 'MANTENIMIENTO',  cargo: 'Jefe Equipos',    emoji: '🔧', color: 'text-[#94A3B8]', bg: 'bg-[#94A3B8]/10 border-[#94A3B8]/20', icon: Wrench, shadow: 'shadow-[#94A3B8]/20', misionPanaderia: 'Revisiones preventivas para que el horno nunca falle.', plantillas: ['Plan de Mantenimiento Preventivo de Hornos', 'Reporte de Averías y Repuestos Críticos', 'Checklist de Seguridad de Maquinaria'] },
@@ -100,6 +111,15 @@ export async function consultarAgente(
     db.getConfiguracion()
   ]);
 
+  // Con imagen (cámaras / escaneo) forzar híbrido: en Vercel no hay Ollama.
+  // Si el modo estaba en "local", fallaba con "No hay proveedores de IA…".
+  const aiModeFinal =
+    sysConfig?.aiMode === 'off' && !imagen
+      ? 'off'
+      : imagen
+        ? 'hybrid'
+        : sysConfig?.aiMode || 'hybrid';
+
   const res = await fetch('/api/agente', {
     method: 'POST',
     headers: encabezadosConClave({ 'Content-Type': 'application/json' }),
@@ -108,7 +128,7 @@ export async function consultarAgente(
       mensaje,
       imagen,
       contexto,
-      aiMode: sysConfig?.aiMode || 'hybrid',
+      aiMode: aiModeFinal,
       soberania: config ? {
         directiva: config.directivaPrimaria,
         restricciones: config.restricciones,
@@ -119,13 +139,20 @@ export async function consultarAgente(
   });
 
   if (!res.ok) {
+    // Leer el body UNA sola vez (json() + text() seguidos = "body stream already read").
     let errorMsg = `Error ${res.status}`;
-    try {
-      const errorJson = await res.json();
-      errorMsg = errorJson.error || errorMsg;
-    } catch {
-      const text = await res.text();
-      errorMsg = text || errorMsg;
+    const raw = await res.text().catch(() => '');
+    if (raw) {
+      try {
+        const errorJson = JSON.parse(raw) as { error?: string };
+        errorMsg = errorJson.error || raw.slice(0, 400);
+      } catch {
+        errorMsg = raw.slice(0, 400);
+      }
+    }
+    if (/proveedores de IA|FUNCTION_INVOCATION/i.test(errorMsg)) {
+      errorMsg +=
+        ' Revisa Configuración → Modo IA (pon Híbrido) y que Gemini/NVIDIA estén activos en Vercel.';
     }
     throw new Error(errorMsg);
   }

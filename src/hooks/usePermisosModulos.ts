@@ -61,8 +61,8 @@ export const ROLES_CONFIGURABLES = [
   { id: 'AUXILIAR',           label: 'Auxiliar',           color: 'bg-slate-500' },
 ];
 
-const VER_VENDEDOR   = ['dashboard','ventas','historial-ventas','caja','creditos','clientes','productos','asistencia','whatsapp-hub','inventario','marketing-studio','modo-ayudante'];
-const VER_COMPRADOR  = ['dashboard','proveedores','prepedidos','recepciones','inventario','productos','precios','alertas','asistencia'];
+const VER_VENDEDOR   = ['dashboard','ventas','historial-ventas','caja','creditos','clientes','productos','asistencia','whatsapp-hub','inventario','marketing-studio','modo-ayudante','nomina'];
+const VER_COMPRADOR  = ['dashboard','proveedores','prepedidos','recepciones','inventario','productos','precios','alertas','asistencia','nomina'];
 const VER_CONTROL_FINANCIERO = [
   'dashboard',
   'caja',
@@ -86,8 +86,8 @@ const VER_CONTROL_FINANCIERO = [
   'asistencia',
   'whatsapp-hub',
 ];
-const VER_PANADERO   = ['dashboard','produccion','recetas','inventario','reportes','asistencia','whatsapp-hub','modo-ayudante'];
-const VER_AUXILIAR   = ['dashboard','ventas','asistencia'];
+const VER_PANADERO   = ['dashboard','produccion','recetas','inventario','reportes','asistencia','whatsapp-hub','modo-ayudante','nomina'];
+const VER_AUXILIAR   = ['dashboard','ventas','asistencia','nomina'];
 const TODOS          = MODULOS_CONFIGURABLES.map(m => m.id);
 
 function defaultParaRol(ids: string[]): PermisosRol {
@@ -118,6 +118,8 @@ const PATCH_MODO_AYUDANTE = 'dp_patch_modo_ayudante_20260917';
 /** Parche: Panadero gana acceso a Captura Rápida (Atrasados) para registrar producciones atrasadas */
 const PATCH_PANADERO_MODO_AYUDANTE = 'dp_patch_panadero_modo_ayudante_20260918';
 const PATCH_VENDEDOR_MODO_AYUDANTE = 'dp_patch_vendedor_modo_ayudante_20260919';
+/** Parche: todos los roles no directivos pueden consultar el horario; Nómina oculta los datos financieros. */
+const PATCH_HORARIO_NOMINA = 'dp_patch_horario_nomina_roles_20261024';
 
 // ─── Persistencia ────────────────────────────────────────────────────────────
 
@@ -253,6 +255,23 @@ export function cargarPermisos(): PermisosModulos {
           },
         };
         localStorage.setItem(PATCH_VENDEDOR_MODO_AYUDANTE, '1');
+        changed = true;
+      }
+
+      if (!localStorage.getItem(PATCH_HORARIO_NOMINA)) {
+        const rolesConHorario: Array<keyof PermisosModulos> = [
+          'CONTROL_FINANCIERO', 'COMPRADOR', 'VENDEDOR', 'PANADERO', 'AUXILIAR',
+        ];
+        for (const rol of rolesConHorario) {
+          parsed = {
+            ...parsed,
+            [rol]: {
+              ...(parsed[rol] || DEFAULT_PERMISOS[rol]),
+              nomina: { ver: true, eliminar: false },
+            },
+          };
+        }
+        localStorage.setItem(PATCH_HORARIO_NOMINA, '1');
         changed = true;
       }
 

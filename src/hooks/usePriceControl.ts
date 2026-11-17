@@ -252,14 +252,18 @@ export function usePriceControl() {
         provsFinal = provs;
 
         // [Nexus-Volt] Sincronizar categorías huérfanas de los productos (Autocuración normalizada)
-        // IMPORTANTE: detectar tipo de categoría huérfana por si sus productos son insumos
+        // NO crear categoría si el "nombre" es en realidad el nombre de un producto (contaminación).
+        const nombresProductosSet = new Set(prodsFinal.map(p => normalizar(p.nombre || '')).filter(Boolean));
         const catsDeProductos = Array.from(new Set(prodsFinal.map(p => p.categoria).filter(Boolean)));
-        const catsFaltantes = catsDeProductos.filter(
-          catName => !finalConfig.categorias.some(c => normalizar(c.nombre) === normalizar(catName))
-        );
+        const catsFaltantes = catsDeProductos.filter((catName) => {
+          if (!catName) return false;
+          if (finalConfig.categorias.some(c => normalizar(c.nombre) === normalizar(catName))) return false;
+          if (nombresProductosSet.has(normalizar(catName))) return false;
+          if (/\(\d|\d{3,}/.test(catName) || catName.length > 45) return false;
+          return true;
+        });
         if (catsFaltantes.length > 0) {
           const nuevasCats = catsFaltantes.map(catName => {
-            // Detectar tipo real: si el nombre empieza con 'INS:' o la mayoría de sus productos son ingredientes
             const esInsumoPorNombre = catName.toUpperCase().startsWith('INS:');
             const productosEnCat = prodsFinal.filter(p => normalizar(p.categoria || '') === normalizar(catName));
             const esInsumoPorProductos = productosEnCat.length > 0 && productosEnCat.every(p => p.tipo === 'ingrediente');
@@ -273,6 +277,16 @@ export function usePriceControl() {
           });
           finalConfig.categorias = [...finalConfig.categorias, ...nuevasCats];
         }
+
+        // Purgar categorías contaminadas (nombre = nombre de producto) que no son del sistema
+        const NOMBRES_DEF = new Set(CATEGORIAS_DEFAULT.map(c => normalizar(c.nombre)));
+        finalConfig.categorias = finalConfig.categorias.filter((c) => {
+          const n = normalizar(c.nombre || '');
+          if (NOMBRES_DEF.has(n)) return true;
+          if (nombresProductosSet.has(n)) return false;
+          if (/\(\d|\d{3,}/.test(c.nombre) || (c.nombre || '').length > 45) return false;
+          return true;
+        });
 
         // ✅ NEXUS-DEDUP FINAL: Deduplicación de categorías con estrategia inteligente
         // - Agrupa por nombre normalizado

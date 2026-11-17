@@ -37,7 +37,7 @@ export const VISTA_PERMISO: Partial<Record<ViewType, Permission>> = {
   expedientes: 'VER_DASHBOARD',
   asistencia: 'VER_DASHBOARD',
   'whatsapp-hub': 'VER_DASHBOARD',
-  nomina: 'VER_FINANZAS',
+  nomina: 'VER_DASHBOARD',
   'modo-ayudante': 'VER_DASHBOARD',
   usuarios: 'VER_USUARIOS',
   roles: 'VER_USUARIOS',
@@ -52,6 +52,17 @@ export type VistaGuardOpts = {
   check: (permission: Permission) => boolean;
   puedeVer: (rol: string, moduloId: string) => boolean;
 };
+
+/** Nómina aloja el Horario consultable por todos los roles; sus datos financieros tienen guardia propia. */
+export const puedeVerModuloMenu = (
+  rol: string,
+  moduloId: string,
+  puedeVer: (rol: string, moduloId: string) => boolean,
+): boolean => moduloId === 'nomina' || puedeVer(rol, moduloId);
+
+/** Roles que pueden cambiar turnos; los demás consultan el cuadro en modo lectura. */
+export const puedeEditarHorario = (rol: string | null | undefined): boolean =>
+  ['ADMIN', 'GERENTE', 'VENDEDOR'].includes(String(rol ?? '').toUpperCase());
 
 /**
  * ¿Puede montarse esta vista?
@@ -68,6 +79,9 @@ export const puedeAccederVista = (view: ViewType, opts: VistaGuardOpts): boolean
   if (!permiso) return true;
 
   if (!opts.check(permiso)) return false;
+  // Nómina también alberga el horario público del equipo; su contenido financiero
+  // se restringe dentro del componente a ADMIN y GERENTE.
+  if (view === 'nomina') return true;
   if (!opts.puedeVer(opts.role ?? '', view)) return false;
   return true;
 };

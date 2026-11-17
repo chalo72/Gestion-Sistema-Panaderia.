@@ -26,6 +26,7 @@ const CATEGORIAS_GASTOS = [
     { value: 'Arriendo',      label: 'Local',         icon: Folder,    color: 'amber'  },
     { value: 'Nómina',        label: 'Nómina',        icon: Users,     color: 'violet' },
     { value: 'Mantenimiento', label: 'Mantenim.',     icon: Settings,  color: 'cyan'   },
+    { value: 'Familia',       label: 'Familia',       icon: Users,     color: 'amber'  },
     { value: 'Otros',         label: 'Otros',         icon: Plus,      color: 'slate'  },
 ];
 
@@ -339,6 +340,16 @@ export function ExpenseList({
                                                     <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[8px] font-bold bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
                                                         <FileText className="w-2.5 h-2.5" />
                                                         {prov}
+                                                    </span>
+                                                )}
+                                                {(gasto.numeroFactura || (gasto.metadata as any)?.numeroFactura) && (
+                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[8px] font-black bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 uppercase tracking-wider">
+                                                        Fact. Nº {gasto.numeroFactura || (gasto.metadata as any)?.numeroFactura}
+                                                    </span>
+                                                )}
+                                                {(gasto.presentacion || (gasto.metadata as any)?.presentacion) && (
+                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[8px] font-black bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 uppercase tracking-wider">
+                                                        {gasto.presentacion || (gasto.metadata as any)?.presentacion}
                                                     </span>
                                                 )}
                                             </div>

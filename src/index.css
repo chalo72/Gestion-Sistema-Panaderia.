@@ -118,6 +118,21 @@
   }
 
   /*
+   * El color claro del body lo heredan los <select> nativos. En Windows
+   * la lista abre en blanco y los nombres quedan casi invisibles.
+   * Una clase Tailwind de color (text-white, text-slate-700) sigue mandando
+   * en el cuadro cerrado. Las opciones de la lista van siempre oscuras.
+   */
+  select {
+    color: #0f172a;
+    color-scheme: light;
+  }
+  select option {
+    color: #0f172a !important;
+    background-color: #ffffff !important;
+  }
+
+  /*
    * Modal Nuevo despacho: el color del body (#f1f5f9) se hereda en select/option/input
    * nativos y deja los nombres casi invisibles sobre fondo blanco del diálogo.
    */
