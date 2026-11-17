@@ -14,7 +14,10 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { formatCurrency } from '@/lib/utils';
-import type { Trabajador } from '@/types';
+import type { Trabajador, Cliente, CreditoCliente } from '@/types';
+import { sumarConsumo, creditoConsumoAbierto } from '@/lib/consumo-clientes';
+
+const PREFIJO_CLIENTE = 'cli:';
 
 export interface CreditoEmpleado {
   id: string;
@@ -31,9 +34,25 @@ export interface CreditoEmpleado {
 interface FiadosEmpleadosProps {
   trabajadores?: Trabajador[];
   onAddGasto?: (g: any) => Promise<any>;
+  // Clientes de confianza (Cliente.enConsumo): su consumo se guarda como crédito del cliente
+  clientes?: Cliente[];
+  creditosClientes?: CreditoCliente[];
+  onAddCreditoCliente?: (c: Omit<CreditoCliente, 'id' | 'createdAt'>) => Promise<void>;
+  onUpdateCreditoCliente?: (id: string, updates: Partial<CreditoCliente>) => Promise<void>;
+  usuarioId?: string;
 }
 
-export default function FiadosEmpleados({ trabajadores = [] }: FiadosEmpleadosProps) {
+export default function FiadosEmpleados({
+  trabajadores = [],
+  clientes = [],
+  creditosClientes = [],
+  onAddCreditoCliente,
+  onUpdateCreditoCliente,
+  usuarioId,
+}: FiadosEmpleadosProps) {
+  const clientesConsumo = clientes.filter(c => c.enConsumo);
+  const puedeAnotarClientes = !!onAddCreditoCliente && !!onUpdateCreditoCliente;
+  const [guardando, setGuardando] = useState(false);
   const [creditos, setCreditos] = useState<CreditoEmpleado[]>(() => {
     try {
       return JSON.parse(localStorage.getItem('dp_whatsapp_creditos_empleadas') || '[]');
@@ -63,9 +82,54 @@ export default function FiadosEmpleados({ trabajadores = [] }: FiadosEmpleadosPr
     }
   };
 
+  const limpiarFormulario = () => {
+    setNuevoCreditoTrabajador('');
+    setNuevoCreditoMonto('');
+    setNuevoCreditoDesc('');
+    setNuevoCreditoFoto(null);
+  };
+
+  // Cliente de confianza → se suma a su crédito de consumo abierto (se sincroniza a la nube)
+  const handleAddConsumoCliente = async (clienteId: string) => {
+    const cliente = clientesConsumo.find(c => c.id === clienteId);
+    if (!cliente || !onAddCreditoCliente || !onUpdateCreditoCliente) {
+      toast.error('No se encontró el cliente.');
+      return;
+    }
+    const montoNum = parseFloat(nuevoCreditoMonto);
+    if (isNaN(montoNum) || montoNum <= 0) {
+      toast.error('Monto inválido.');
+      return;
+    }
+    setGuardando(true);
+    try {
+      const abierto = creditoConsumoAbierto(creditosClientes, cliente.id);
+      const r = sumarConsumo(abierto, {
+        cliente,
+        monto: montoNum,
+        descripcion: nuevoCreditoDesc,
+        foto: nuevoCreditoFoto,
+        usuarioId: usuarioId || 'consumo',
+      });
+      if (r.esNuevo) await onAddCreditoCliente(r.credito);
+      else await onUpdateCreditoCliente(r.credito.id, r.credito);
+      limpiarFormulario();
+      toast.success(`Anotado a ${cliente.nombre}. Debe ${formatCurrency(r.credito.saldo)}.`);
+    } catch (e) {
+      console.error('[Consumo] Error guardando consumo de cliente:', e);
+      toast.error('No se pudo guardar el consumo del cliente.');
+    } finally {
+      setGuardando(false);
+    }
+  };
+
   const handleAddCredito = () => {
     if (!nuevoCreditoTrabajador || !nuevoCreditoMonto) {
-      toast.error('Selecciona la empleada y el monto.');
+      toast.error('Selecciona la persona y el monto.');
+      return;
+    }
+    if (nuevoCreditoTrabajador.startsWith(PREFIJO_CLIENTE)) {
+      void handleAddConsumoCliente(nuevoCreditoTrabajador.slice(PREFIJO_CLIENTE.length));
       return;
     }
 
@@ -143,17 +207,31 @@ export default function FiadosEmpleados({ trabajadores = [] }: FiadosEmpleadosPr
             </CardHeader>
             <CardContent className="p-4 space-y-4 pt-6">
               <div className="space-y-2">
-                <Label className="text-xs font-bold text-slate-500 uppercase">Trabajadora / Empleada</Label>
-                <select 
+                <Label className="text-xs font-bold text-slate-500 uppercase">
+                  {puedeAnotarClientes && clientesConsumo.length > 0 ? 'Empleada o Cliente' : 'Trabajadora / Empleada'}
+                </Label>
+                <select
                   className="flex h-10 w-full rounded-md border border-slate-200 bg-transparent px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 dark:border-slate-800"
                   value={nuevoCreditoTrabajador}
                   onChange={e => setNuevoCreditoTrabajador(e.target.value)}
                 >
-                  <option value="">Selecciona empleada...</option>
-                  {trabajadores.map(t => (
-                    <option key={t.id} value={t.id}>{t.nombre}</option>
-                  ))}
+                  <option value="">Selecciona quién consume...</option>
+                  <optgroup label="Empleadas">
+                    {trabajadores.map(t => (
+                      <option key={t.id} value={t.id}>{t.nombre}</option>
+                    ))}
+                  </optgroup>
+                  {puedeAnotarClientes && clientesConsumo.length > 0 && (
+                    <optgroup label="Clientes de confianza">
+                      {clientesConsumo.map(c => (
+                        <option key={c.id} value={`${PREFIJO_CLIENTE}${c.id}`}>{c.nombre}</option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
+                {nuevoCreditoTrabajador.startsWith(PREFIJO_CLIENTE) && (
+                  <p className="text-xs text-slate-500">Se suma a la cuenta del cliente en Créditos de Clientes.</p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -191,8 +269,8 @@ export default function FiadosEmpleados({ trabajadores = [] }: FiadosEmpleadosPr
                 </div>
               </div>
 
-              <Button onClick={handleAddCredito} className="w-full h-12 bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg font-bold">
-                Guardar Consumo Interno
+              <Button onClick={handleAddCredito} disabled={guardando} className="w-full h-12 bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg font-bold">
+                {guardando ? 'Guardando…' : 'Guardar Consumo'}
               </Button>
             </CardContent>
           </Card>
@@ -200,6 +278,37 @@ export default function FiadosEmpleados({ trabajadores = [] }: FiadosEmpleadosPr
 
         {/* PANEL DERECHO: HISTORIAL */}
         <div className="lg:col-span-7 space-y-6">
+          {puedeAnotarClientes && clientesConsumo.length > 0 && (
+            <Card className="border-slate-200 dark:border-slate-800 shadow-xl bg-white/50 dark:bg-slate-900/50 backdrop-blur-xl">
+              <CardHeader className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-800">
+                <CardTitle className="text-sm text-slate-700 dark:text-slate-300">Clientes de confianza — cuenta abierta</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {clientesConsumo.map(cl => {
+                    const cuenta = creditoConsumoAbierto(creditosClientes, cl.id);
+                    const ultimas = (cuenta?.items || []).slice(-3).reverse();
+                    return (
+                      <div key={cl.id} className="p-4 space-y-1">
+                        <div className="flex justify-between items-start gap-2">
+                          <h4 className="font-bold text-slate-900 dark:text-white">{cl.nombre}</h4>
+                          <span className="font-black text-indigo-600 dark:text-indigo-400">
+                            {cuenta ? `Debe ${formatCurrency(cuenta.saldo)}` : 'Al día'}
+                          </span>
+                        </div>
+                        {ultimas.map((it, i) => (
+                          <p key={i} className="text-sm text-slate-600 dark:text-slate-400 flex justify-between gap-2">
+                            <span>{it.nombre}</span>
+                            <span className="tabular-nums">{formatCurrency(it.subtotal)}</span>
+                          </p>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
           <Card className="border-slate-200 dark:border-slate-800 shadow-xl bg-white/50 dark:bg-slate-900/50 backdrop-blur-xl h-full">
             <CardHeader className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-800">
               <CardTitle className="text-sm text-slate-700 dark:text-slate-300">Historial de Consumos Activos</CardTitle>

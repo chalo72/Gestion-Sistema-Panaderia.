@@ -4,7 +4,31 @@ import {
   mergePrecioLocalGana,
   mergeHydrateItem,
   preciosParaSubir,
+  pendientesDeSubir,
 } from './sync-merge-local-gana';
+
+describe('pendientesDeSubir (clientes y créditos: celular viejo no devuelve un saldo anterior)', () => {
+  const nube = new Map([['cr1', '2026-11-16T15:00:00.000Z']]); // abono registrado hoy en el PC
+
+  it('NO sube el crédito con saldo viejo de un celular desactualizado', () => {
+    const local = [{ id: 'cr1', saldo: 10000, updatedAt: '2026-11-15T09:00:00.000Z' }];
+    expect(pendientesDeSubir(local, nube)).toEqual([]);
+  });
+
+  it('SÍ sube un consumo anotado aquí después del abono', () => {
+    const local = [{ id: 'cr1', saldo: 7000, updatedAt: '2026-11-16T16:00:00.000Z' }];
+    expect(pendientesDeSubir(local, nube).map(c => c.id)).toEqual(['cr1']);
+  });
+
+  it('SÍ sube créditos que la nube nunca recibió', () => {
+    const local = [{ id: 'viejo-sin-subir', saldo: 5000, createdAt: '2026-10-01T09:00:00.000Z' }];
+    expect(pendientesDeSubir(local, nube).map(c => c.id)).toEqual(['viejo-sin-subir']);
+  });
+
+  it('no sube nada si no se pudo leer la nube', () => {
+    expect(pendientesDeSubir([{ id: 'x', updatedAt: '2026-11-16T16:00:00.000Z' }], null)).toEqual([]);
+  });
+});
 
 describe('preciosParaSubir (celular viejo no borra corrección de otro equipo)', () => {
   const nube = new Map([

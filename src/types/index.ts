@@ -1199,6 +1199,7 @@ export interface Cliente {
   notas?: string;
   puntosLealtad?: number;
   margenPersonalizado?: number; // NUEVO: Para precios de mayorista personalizados
+  enConsumo?: boolean; // Aparece en Consumo Interno / Fiados para anotarle rápido (2026-11-16)
   createdAt: string;
 }
 

@@ -902,7 +902,7 @@ const App = () => {
       case 'expedientes':
         return <Expedientes />;
       case 'fiados-empleados':
-        return <FiadosEmpleados trabajadores={trabajadores} onAddGasto={addGasto} />;
+        return <FiadosEmpleados trabajadores={trabajadores} onAddGasto={addGasto} clientes={clientes} creditosClientes={creditosClientes} onAddCreditoCliente={addCreditoCliente} onUpdateCreditoCliente={updateCreditoCliente} usuarioId={user?.id} />;
       case 'monetizacion-influencer':
         return <MonetizacionInfluencer />;
       case 'marketing-studio':

@@ -1089,30 +1089,58 @@ export class SupabaseDatabase implements IDatabase {
     }
 
     // --- Créditos Clientes ---
+    // 2026-11-16: antes devolvía las filas crudas (snake_case) y la app las guardaba así;
+    // y el guardado fallaba siempre porque la tabla tenía otro formato (ver migración
+    // 20261116190000_creditos_clientes_formato_app.sql). Ahora se traduce en ambos sentidos.
     async getAllCreditosClientes(): Promise<any[]> {
         const { data, error } = await supabase.from('creditos').select('*');
         if (error) return [];
-        return data;
+        return (data || []).map((r: any) => this.mapCreditoClienteFromDB(r));
+    }
+    public mapCreditoClienteFromDB(r: any): any {
+        return {
+            id: r.id,
+            clienteId: r.cliente_id ?? undefined,
+            clienteNombre: r.cliente_nombre ?? '',
+            clienteTelefono: r.cliente_telefono ?? undefined,
+            categoriaCliente: r.categoria_cliente ?? undefined,
+            monto: Number(r.monto ?? r.monto_total ?? 0),
+            saldo: Number(r.saldo ?? r.saldo_pendiente ?? 0),
+            descripcion: r.descripcion ?? '',
+            fecha: r.fecha ?? (r.created_at ? String(r.created_at).split('T')[0] : ''),
+            fechaVencimiento: r.fecha_vencimiento ?? undefined,
+            estado: r.estado === 'pendiente' || r.estado === 'parcial' ? 'activo' : (r.estado ?? 'activo'),
+            items: Array.isArray(r.items) ? r.items : [],
+            fotoEvidencia: r.foto_evidencia ?? undefined,
+            pagos: Array.isArray(r.pagos) ? r.pagos : (Array.isArray(r.abonos) ? r.abonos : []),
+            usuarioId: r.usuario_id ?? '',
+            createdAt: r.created_at,
+            updatedAt: r.updated_at ?? r.created_at,
+        };
     }
     async addCreditoCliente(c: any): Promise<void> {
-        // Detectar si viene en formato local (camelCase) y convertir a snake_case
+        const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        // Formato local (camelCase) → columnas de la nube. Si ya viene en snake_case, se manda igual.
         const row = c.clienteNombre !== undefined ? {
             id: c.id,
-            cliente_id: c.clienteId ?? null,
+            cliente_id: c.clienteId && UUID.test(c.clienteId) ? c.clienteId : null,
             cliente_nombre: c.clienteNombre,
-            cliente_telefono: c.clienteTelefono ?? null,
+            cliente_telefono: c.clienteTelefono || null,
             categoria_cliente: c.categoriaCliente ?? null,
-            monto: c.monto,
-            saldo: c.saldo,
-            descripcion: c.descripcion,
-            fecha: c.fecha,
-            fecha_vencimiento: c.fechaVencimiento ?? null,
-            estado: c.estado,
+            monto: safeN(c.monto),
+            saldo: safeN(c.saldo),
+            monto_total: safeN(c.monto),
+            saldo_pendiente: safeN(c.saldo),
+            descripcion: c.descripcion ?? '',
+            fecha: c.fecha ?? null,
+            fecha_vencimiento: c.fechaVencimiento || null,
+            estado: c.estado ?? 'activo',
             items: c.items ?? [],
             foto_evidencia: c.fotoEvidencia ?? null,
             pagos: c.pagos ?? [],
             usuario_id: c.usuarioId ?? null,
             created_at: c.createdAt ?? new Date().toISOString(),
+            updated_at: c.updatedAt ?? new Date().toISOString(),
         } : c; // ya está en snake_case (vino de Supabase)
         const { error } = await supabase.from('creditos').upsert(row);
         if (error) throw error;
@@ -1147,6 +1175,7 @@ export class SupabaseDatabase implements IDatabase {
             telefono: c.telefono ?? null,
             tipo: c.tipo ?? 'mayorista',
             direccion: c.direccion ?? null,
+            enConsumo: c.en_consumo === true,
             createdAt: c.created_at,
             updatedAt: c.updated_at,
         };
@@ -1158,7 +1187,10 @@ export class SupabaseDatabase implements IDatabase {
             telefono: c.telefono ?? null,
             tipo: c.tipo ?? 'mayorista',
             direccion: c.direccion ?? null,
-            updated_at: new Date().toISOString(),
+            // Solo se manda si el aparato conoce el dato (un aparato viejo sin el campo no lo apaga)
+            ...(typeof c.enConsumo === 'boolean' ? { en_consumo: c.enConsumo } : {}),
+            // Fecha real del último cambio (antes siempre "ahora": la nube parecía siempre más nueva)
+            updated_at: c.updatedAt ?? new Date().toISOString(),
             created_at: c.createdAt ?? c.created_at ?? new Date().toISOString(),
         };
     }

@@ -13,7 +13,7 @@ import { SupabaseDatabase } from '@/lib/supabase-db';
 import { isSelfWrite, registerSelfWrite } from '@/lib/deviceId';
 import { originalDbMethods, supabaseDB, flushSyncOutbox } from '@/lib/supabase-sync-bridge';
 import { db, localAdapter } from '@/lib/database';
-import { mergeHydrateItem, mergePrecioLocalGana, preciosParaSubir } from '@/lib/sync-merge-local-gana';
+import { mergeHydrateItem, mergePrecioLocalGana, preciosParaSubir, pendientesDeSubir } from '@/lib/sync-merge-local-gana';
 
 const _sdb = new SupabaseDatabase();
 
@@ -301,11 +301,18 @@ export function useRealtimeSync() {
     // Esto evita que un dispositivo con datos viejos sobreescriba ediciones recientes
     // y evita resurrecciones de productos eliminados que otro dispositivo tenía.
     const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const [supabaseProductos, supabaseProveedores, supabasePrecios] = await Promise.all([
+    const [supabaseProductos, supabaseProveedores, supabasePrecios, supabaseClientes, supabaseCreditosCli] = await Promise.all([
       _sdb.getAllProductos().catch(() => [] as any[]),
       _sdb.getAllProveedores().catch(() => [] as any[]),
       _sdb.getAllPrecios().catch(() => null),
+      // getAllClientes / getAllCreditosClientes devuelven [] si fallan → aquí null = "no se pudo leer"
+      supabase.from('clientes').select('id, updated_at').then(({ data, error }) => (error ? null : data)),
+      supabase.from('creditos').select('id, updated_at, created_at').then(({ data, error }) => (error ? null : data)),
     ]);
+    const fechasNube = (rows: any[] | null) =>
+      rows ? new Map(rows.map((r: any) => [r.id, r.updated_at ?? r.created_at ?? ''])) : null;
+    const sClientesMap = fechasNube(supabaseClientes as any[] | null);
+    const sCreditosCliMap = fechasNube(supabaseCreditosCli as any[] | null);
     const sProdsMap = new Map(supabaseProductos.map((i: any) => [i.id, i.updatedAt ?? i.createdAt ?? '']));
     const sProvsMap = new Map(supabaseProveedores.map((i: any) => [i.id, i.updatedAt ?? i.createdAt ?? '']));
     // Precios: la nube solo guarda fecha_actualizacion, así que se compara por esa fecha.
@@ -358,7 +365,12 @@ export function useRealtimeSync() {
         return items.filter((i: any) => i.productoId && UUID.test(i.productoId) && validIds.has(i.productoId));
       }, (d) => supabaseDB.updateInventarioItem(d)],
       ['prepedidos',  () => db.getAllPrePedidos(),       (d) => supabaseDB.addPrePedido(d)],
-      ['creditos_clientes',    () => db.getAllCreditosClientes(), (d) => supabaseDB.addCreditoCliente(d)],
+      // Créditos de clientes: solo sube lo que la nube no tiene o lo cambiado aquí después
+      // (un celular viejo no devuelve un saldo anterior a un abono) — 2026-11-16
+      ['creditos_clientes',    async () => {
+        const borrados = new Set(await db.getTombstones('creditos_clientes').catch(() => [] as string[]));
+        return pendientesDeSubir((await db.getAllCreditosClientes()) as any[], sCreditosCliMap, borrados);
+      }, (d) => supabaseDB.addCreditoCliente(d)],
       // No subir cajas ABIERTAS de días anteriores: son copias viejas y reabrían en la nube
       // cajas que el cron ya había cerrado (2026-11-07, PC con la caja de ayer).
       ['sesiones_caja',        async () => {
@@ -374,7 +386,10 @@ export function useRealtimeSync() {
       ['creditos_trabajadores', () => db.getAllCreditosTrabajadores(), (d) => supabaseDB.addCreditoTrabajador(d)],
       ['recetas',         () => db.getAllRecetas(),        (d) => supabaseDB.addReceta(d)],
       ['produccion',      () => db.getAllOrdenesProduccion(), (d) => supabaseDB.addOrdenProduccion(d)],
-      ['clientes',        () => db.getAllClientes(),       (d) => supabaseDB.addCliente(d)],
+      ['clientes',        async () => {
+        const borrados = new Set(await db.getTombstones('clientes').catch(() => [] as string[]));
+        return pendientesDeSubir((await db.getAllClientes()) as any[], sClientesMap, borrados);
+      }, (d) => supabaseDB.addCliente(d)],
       ['nominas',         () => db.getAllNominas(),        (d) => supabaseDB.addNomina(d)],
       ['configuracion',   () => db.getConfiguracion().then(c => c ? [c] : []), (d) => supabaseDB.saveConfiguracion(d)],
       ['formulaciones_data', async () => {

@@ -200,13 +200,27 @@ export const preciosParaSubir = <T extends { id: string; fechaActualizacion?: st
   locales: T[],
   remotoFechas: Map<string, string> | null,
   borrados: Set<string> = new Set()
+): T[] => pendientesDeSubir(locales, remotoFechas, borrados, (p) => p.fechaActualizacion ?? p.updatedAt);
+
+/**
+ * Regla general (2026-11-16): de lo que tiene este aparato, qué se sube a la nube.
+ * Solo lo que la nube no tiene, o lo que este aparato cambió DESPUÉS que la nube.
+ * Usada para precios, clientes y créditos de clientes/empleadas.
+ */
+export const pendientesDeSubir = <T extends { id: string }>(
+  locales: T[],
+  remotoFechas: Map<string, string> | null,
+  borrados: Set<string> = new Set(),
+  fechaLocal: (item: T) => string | undefined = (i) =>
+    ((i as Record<string, unknown>).updatedAt as string | undefined) ??
+    ((i as Record<string, unknown>).createdAt as string | undefined)
 ): T[] => {
   if (!remotoFechas) return [];
   return locales.filter((local) => {
     if (!local?.id || borrados.has(local.id)) return false;
     if (!remotoFechas.has(local.id)) return true; // nuevo en este aparato
     const remoteTs = new Date(remotoFechas.get(local.id) || 0).getTime();
-    const localTs = new Date(local.fechaActualizacion ?? local.updatedAt ?? 0).getTime();
+    const localTs = new Date(fechaLocal(local) ?? 0).getTime();
     if (!Number.isFinite(localTs) || localTs <= 0) return false;
     if (!Number.isFinite(remoteTs) || remoteTs <= 0) return true;
     return localTs > remoteTs;
