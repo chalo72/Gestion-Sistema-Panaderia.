@@ -27,3 +27,38 @@ export const trabajadorasActivas = (principal: Trabajador[], extra: Trabajador[]
 
 export const unirAsistencia = (principal: RegistroAsistencia[], extra: RegistroAsistencia[]): RegistroAsistencia[] =>
   unirPorId(principal, extra);
+
+export type EstadoLlegada = 'sin-llegar' | 'adentro' | 'salio';
+
+/**
+ * Cómo está hoy una trabajadora (2026-11-17, pedido de Gonzalo):
+ * - 'sin-llegar': no ha presionado "Llegué" → aviso.
+ * - 'adentro': ya llegó → tarjeta verde y "Llegué" bloqueado en TODOS los aparatos.
+ * - 'salio': presionó "Me voy".
+ */
+export const estadoDelDia = (
+  registros: RegistroAsistencia[],
+  trabajadorId: string,
+  hoy: string,
+): { estado: EstadoLlegada; ultimo?: RegistroAsistencia; llegada?: RegistroAsistencia } => {
+  const delDia = registros
+    .filter(r => r.trabajadorId === trabajadorId && r.fecha === hoy)
+    .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
+  if (delDia.length === 0) return { estado: 'sin-llegar' };
+  const ultimo = delDia[delDia.length - 1];
+  const llegada = [...delDia].reverse().find(r => r.tipo === 'entrada');
+  return { estado: ultimo.tipo === 'entrada' ? 'adentro' : 'salio', ultimo, llegada };
+};
+
+/**
+ * Hora local del registro. La nube devolvía la hora en UTC ("12:05" en vez de "07:05"),
+ * así que si hay fecha de creación se usa esa, convertida a la hora del aparato.
+ */
+export const horaLocalDeRegistro = (r: Pick<RegistroAsistencia, 'hora' | 'createdAt'> | undefined): string => {
+  if (!r) return '';
+  const d = r.createdAt ? new Date(r.createdAt) : null;
+  if (d && Number.isFinite(d.getTime())) {
+    return d.toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit', hour12: true });
+  }
+  return r.hora || '';
+};

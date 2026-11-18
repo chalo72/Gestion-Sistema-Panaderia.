@@ -419,6 +419,12 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 - **Causa**: `Asistencia.tsx` recibía `trabajadores` de `usePriceControl.loadSecondaryDataInBackground`, que los pone al FINAL de 21 lecturas (todas las ventas, migraciones…). Mientras tanto, o si algo de esa cadena fallaba, la lista quedaba vacía. Además filtraba `estado === 'activo'` exacto.
 - **Arreglo** (rama `fix/turno-asistencia-carga-rapida`, sin tocar archivos protegidos): la pantalla lee `db.getAllTrabajadores()` y `db.getAllAsistencia()` al abrir; si el aparato no tiene trabajadoras, las trae de la nube con límite de 8 s; une con lo que llegue por props (`src/lib/asistencia-lista.ts`, 4 pruebas); muestra "Cargando trabajadoras…" en vez de "no hay"; acepta "Activo"/" activo ".
 - **Pendiente posible**: el arreglo de fondo sería que `usePriceControl` ponga trabajadoras/clientes antes de las listas pesadas (archivo protegido, requiere AUTORIZO).
+- **PUBLICADO 2026-11-17** (PR #13, commit `790e2148`).
+
+### 🟢 2026-11-17 — Claude Opus 5.5 — Turno: "Llegué" queda en verde y bloqueado en TODOS los aparatos (pedido de Gonzalo)
+- **Bugs encontrados**: (1) el aviso en vivo llega con tabla `asistencias` pero `usePriceControl` escucha `asistencia` → los otros aparatos nunca refrescaban las llegadas; (2) `supabase-db.getAllAsistencias` calcula `hora` en UTC (5 h adelante en otros aparatos); (3) `asistencias` no estaba en la lista de subida de `syncNow` → una llegada que no subió al presionar nunca se reintentaba.
+- **Hecho** (rama `feat/turno-llegada-bloqueada`, sin tocar archivos protegidos): `Asistencia.tsx` escucha `asistencias`/`asistencia`, revisa la nube del día cada 45 s y al volver a la app, y antes de marcar "Llegué" consulta la nube (máx. 4 s) para no marcar dos veces. Tarjeta verde + botón "✔ Ya llegó" bloqueado; aviso ámbar "Todavía no ha marcado su llegada"; "Me voy" solo después de llegar; tras salir aparece "Volví". Horas mostradas desde `createdAt` en hora local (`horaLocalDeRegistro`). `estadoDelDia` en `src/lib/asistencia-lista.ts` (9 pruebas). `asistencias` agregada a `pushTasks`.
+- **Pendiente**: corregir de raíz la hora UTC en `supabase-db.getAllAsistencias` y el nombre `asistencia`→`asistencias` en `usePriceControl` (ambos protegidos, requieren AUTORIZO). No probado en celular real.
 ---
 
 ✅ COMPLETADO — Claude Sonnet 5 — 2026-09-19 — Auditoría en vivo pedida por Gonzalo: Modo Ayudante (masa/arrobas), acceso por rol VENDEDOR/PANADERO, e historial de Caja/Ventas.
