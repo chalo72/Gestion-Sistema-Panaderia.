@@ -9,6 +9,7 @@ import {
   esCajaRevivida,
   valoresIguales,
   enLotes,
+  creditoAtrasado,
 } from './sync-merge-local-gana';
 
 describe('pendientesDeSubir (clientes y créditos: celular viejo no devuelve un saldo anterior)', () => {
@@ -234,5 +235,45 @@ describe('enLotes', () => {
     });
     expect(hechos.sort()).toEqual([1, 2, 3, 4, 5, 6, 7]);
     expect(maximo).toBeLessThanOrEqual(3);
+  });
+});
+
+describe('créditos: un descuento de nómina nunca se deshace (Andrea, 2026-11-18)', () => {
+  const descontado = {
+    id: 'c1', estado: 'descontado', saldo: 0, monto: 6500,
+    pagos: [{ id: 'p1', monto: 6500, cobrada: true, nota: 'Cuota cobrada · 2da quincena Octubre' }],
+    updatedAt: '2026-11-01T04:00:00.000Z',
+  };
+  const copiaVieja = { id: 'c1', estado: 'activo', saldo: 6500, monto: 6500, pagos: [], updatedAt: '2026-11-18T01:51:00.000Z' };
+
+  it('una copia vieja "activo" (aunque tenga fecha más nueva) no deshace el descuento al bajar', () => {
+    const r: any = mergeHydrateItem('creditos_trabajadores', copiaVieja as any, descontado as any);
+    expect(r.estado).toBe('descontado');
+    expect(r.saldo).toBe(0);
+    expect(r.pagos).toHaveLength(1);
+  });
+
+  it('el aparato que hizo el descuento lo conserva aunque la nube traiga la copia vieja', () => {
+    const r: any = mergeHydrateItem('creditos_trabajadores', descontado as any, copiaVieja as any);
+    expect(r.estado).toBe('descontado');
+  });
+
+  it('creditoAtrasado detecta la copia sin el cobro', () => {
+    expect(creditoAtrasado(copiaVieja, descontado)).toBe(true);
+    expect(creditoAtrasado(descontado, copiaVieja)).toBe(false);
+  });
+
+  it('préstamo en cuotas: la copia con menos cuotas cobradas está atrasada', () => {
+    const unaCuota = { id: 'p', estado: 'activo', saldo: 100000, pagos: [{ monto: 50000 }] };
+    const dosCuotas = { id: 'p', estado: 'activo', saldo: 50000, pagos: [{ monto: 50000 }, { monto: 50000 }] };
+    expect(creditoAtrasado(unaCuota, dosCuotas)).toBe(true);
+    const r: any = mergeHydrateItem('creditos_trabajadores', unaCuota as any, dosCuotas as any);
+    expect(r.saldo).toBe(50000);
+  });
+
+  it('una edición normal (descripción) sigue la regla de siempre', () => {
+    const a = { id: 'x', estado: 'activo', saldo: 3000, descripcion: 'Pan', pagos: [], updatedAt: '2026-11-10T00:00:00Z' };
+    const b = { ...a, descripcion: 'Pan y gaseosa', updatedAt: '2026-11-12T00:00:00Z' };
+    expect((mergeHydrateItem('creditos_trabajadores', a as any, b as any) as any).descripcion).toBe('Pan y gaseosa');
   });
 });

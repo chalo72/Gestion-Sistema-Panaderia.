@@ -36,7 +36,7 @@ import { SupabaseDatabase } from '@/lib/supabase-db';
 import { isSelfWrite, registerSelfWrite } from '@/lib/deviceId';
 import { supabaseDB, flushSyncOutbox } from '@/lib/supabase-sync-bridge';
 import { db, localAdapter } from '@/lib/database';
-import { mergeHydrateItem, timestampDeDoc, esCajaRevivida, valoresIguales, enLotes } from '@/lib/sync-merge-local-gana';
+import { mergeHydrateItem, timestampDeDoc, esCajaRevivida, valoresIguales, enLotes, creditoAtrasado } from '@/lib/sync-merge-local-gana';
 import { RESPALDOS_HORARIO } from '@/lib/horario-tienda';
 import { hoyLocal, ymdLocal } from '@/lib/fecha-local';
 
@@ -329,6 +329,13 @@ function hayQueSubir(local: any, remoto: any | undefined, table?: string): boole
   if (table === 'sesiones_caja') {
     if (esCajaRevivida(local, remoto)) return true;  // el cierre de aquí no llegó a la nube
     if (esCajaRevivida(remoto, local)) return false; // no reabrir en la nube una caja ya cerrada
+  }
+  // Créditos: un celular con una copia SIN el descuento de nómina no lo deshace en la nube
+  // (el consumo reaparecía en la nómina siguiente, 2026-11-18). Y si aquí está el cobro y en
+  // la nube no, sí se sube.
+  if (table === 'creditos_trabajadores' || table === 'creditos_clientes') {
+    if (creditoAtrasado(local, remoto)) return false;
+    if (creditoAtrasado(remoto, local)) return true;
   }
   const lt = timestampDeDoc(local);
   const rt = timestampDeDoc(remoto);

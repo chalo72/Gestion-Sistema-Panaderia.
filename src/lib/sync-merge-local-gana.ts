@@ -188,6 +188,11 @@ export const mergeHydrateItem = <T extends { id: string }>(
 ): T => {
   if (!local) return { ...cloud, id: cloud.id };
 
+  // Créditos: un cobro de nómina nunca se deshace (ver mergeCreditoCobroGana, 2026-11-18)
+  if (collection === 'creditos_trabajadores' || collection === 'creditos_clientes') {
+    return mergeCreditoCobroGana(local, cloud, mergeHydrateItem('_credito', local, cloud));
+  }
+
   // Caja: un cierre nunca se deshace. Si cualquiera de los dos lados la tiene cerrada,
   // queda cerrada con los datos de cierre de ese lado (2026-11-07: el PC reabría cajas).
   if (collection === 'sesiones_caja') {
@@ -306,4 +311,49 @@ export const enLotes = async <T>(lista: T[], tamano: number, fn: (item: T) => Pr
   for (let i = 0; i < lista.length; i += tamano) {
     await Promise.all(lista.slice(i, i + tamano).map(fn));
   }
+};
+
+// ── Créditos de trabajadoras: un descuento de nómina nunca se deshace (2026-11-18) ──
+// Un celular con una copia vieja (sin el descuento) volvía a dejar el crédito "activo" y
+// el consumo reaparecía en la nómina siguiente. Se mide el avance por los cobros hechos.
+
+const ESTADOS_CERRADOS = new Set(['descontado', 'pagado']);
+
+/** Cuánto se ha cobrado de este crédito (suma de pagos con monto > 0). */
+export const totalCobrado = (c: unknown): number => {
+  const pagos = (c as { pagos?: unknown })?.pagos;
+  if (!Array.isArray(pagos)) return 0;
+  return pagos.reduce((s: number, p: any) => {
+    const m = Number(p?.monto);
+    return s + (p?.cobrada !== false && Number.isFinite(m) && m > 0 ? m : 0);
+  }, 0);
+};
+
+/**
+ * ¿`viejo` está ATRASADO frente a `nuevo` en cobros de nómina?
+ * (nuevo ya está cerrado y viejo sigue activo, o nuevo tiene más cobrado).
+ */
+export const creditoAtrasado = (viejo: unknown, nuevo: unknown): boolean => {
+  if (!viejo || !nuevo) return false;
+  const ev = String((viejo as any).estado ?? '');
+  const en = String((nuevo as any).estado ?? '');
+  if (ESTADOS_CERRADOS.has(en) && !ESTADOS_CERRADOS.has(ev)) return true;
+  return totalCobrado(nuevo) > totalCobrado(viejo) + 0.5;
+};
+
+/** Toma de `adelantado` los campos del cobro (estado, saldo, pagos, cuota); lo demás de `base`. */
+const conservarCobro = <T extends { id: string }>(adelantado: T, base: T): T => {
+  const a = adelantado as Record<string, unknown>;
+  const o = { ...(base as Record<string, unknown>) };
+  for (const k of ['estado', 'saldo', 'pagos', 'cuota', 'fechaDescuento']) {
+    if (a[k] !== undefined) o[k] = a[k];
+  }
+  return o as T;
+};
+
+/** Unión para créditos: primero que no se pierda ningún cobro, luego la regla normal. */
+export const mergeCreditoCobroGana = <T extends { id: string }>(local: T, cloud: T, normal: T): T => {
+  if (creditoAtrasado(local, cloud)) return conservarCobro(cloud, normal);
+  if (creditoAtrasado(cloud, local)) return conservarCobro(local, normal);
+  return normal;
 };
