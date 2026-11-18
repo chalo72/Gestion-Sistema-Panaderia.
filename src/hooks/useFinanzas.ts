@@ -1,4 +1,5 @@
 import { generateUUID } from '@/lib/safe-utils';
+import { conEvento, nuevoEvento, detalleCreado, detalleCambios } from '@/lib/historial-credito';
 /**
  * useFinanzas — Sub-hook para gestión de gastos, créditos y trabajadores
  * Extraído de usePriceControl.ts para reducir su tamaño
@@ -209,7 +210,9 @@ export function useFinanzas({ onAjustarStock }: UseFinanzasParams) {
 
   // --- Créditos Trabajadores ---
   const addCreditoTrabajador = useCallback(async (c: Omit<CreditoTrabajador, 'id' | 'createdAt'>) => {
-    const nuevo: CreditoTrabajador = { ...c, id: generateUUID(), createdAt: new Date().toISOString() };
+    const base: CreditoTrabajador = { ...c, id: generateUUID(), createdAt: new Date().toISOString() };
+    // Historial: quién lo anotó, desde qué aparato, fecha y hora (2026-11-18)
+    const nuevo: CreditoTrabajador = conEvento(base, nuevoEvento('creado', detalleCreado(base)));
     await db.addCreditoTrabajador(nuevo);
     setCreditosTrabajadores(prev => [nuevo, ...prev]);
     // Descontar del inventario cada producto tomado
@@ -223,7 +226,10 @@ export function useFinanzas({ onAjustarStock }: UseFinanzasParams) {
   const updateCreditoTrabajador = useCallback(async (id: string, updates: Partial<CreditoTrabajador>) => {
     const credito = creditosTrabajadores.find(c => c.id === id);
     if (!credito) return;
-    const updated = { ...credito, ...updates };
+    let updated = { ...credito, ...updates };
+    // Historial: si cambió el monto, la descripción, el tipo o la trabajadora, queda anotado quién y cuándo
+    const cambios = detalleCambios(credito, updates);
+    if (cambios) updated = conEvento(updated, nuevoEvento('editado', cambios));
     await db.updateCreditoTrabajador(updated);
     setCreditosTrabajadores(prev => prev.map(c => c.id === id ? updated : c));
   }, [creditosTrabajadores]);
