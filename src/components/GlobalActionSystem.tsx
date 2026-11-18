@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { empaqueDesdeFormulario } from '@/lib/empaque-producto';
 import {
     Plus,
     ShoppingCart,
@@ -109,7 +110,9 @@ export function GlobalActionSystem(props: GlobalActionSystemProps) {
                 ...productFormData,
                 precioVenta: parseFloat(productFormData.precioVenta),
                 margenUtilidad: parseFloat(productFormData.margenUtilidad),
-                costoBase: parseFloat(productFormData.precioCosto || '0'),
+                // Compra por paquete: costo por UNIDAD y cuántas trae (2026-11-18)
+                costoBase: empaqueDesdeFormulario(productFormData).porPaquete ? empaqueDesdeFormulario(productFormData).costoUnidad : parseFloat(productFormData.precioCosto || '0'),
+                unidadesPaquete: empaqueDesdeFormulario(productFormData).unidades,
                 tipo: parseFloat(productFormData.precioVenta) > 0 ? 'elaborado' : 'ingrediente'
             });
             setActiveModal(null);

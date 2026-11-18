@@ -1355,6 +1355,7 @@ export class SupabaseDatabase implements IDatabase {
             descuentoMayorista: p.descuento_mayorista ?? undefined,
             comisionRepartidor: p.comision_repartidor ?? undefined,
             unidadesPaquete: p.unidades_paquete ?? undefined,
+            precioVentaPaquete: p.precio_venta_paquete != null ? Number(p.precio_venta_paquete) : undefined,
             createdAt: p.created_at,
             updatedAt: p.updated_at
         } as any;
@@ -1374,6 +1375,8 @@ export class SupabaseDatabase implements IDatabase {
             ...((p as any).descuentoMayorista !== undefined ? { descuento_mayorista: safeN((p as any).descuentoMayorista) } : {}),
             ...((p as any).comisionRepartidor !== undefined ? { comision_repartidor: safeN((p as any).comisionRepartidor) } : {}),
             ...((p as any).unidadesPaquete !== undefined ? { unidades_paquete: Math.round(safeN((p as any).unidadesPaquete)) } : {}),
+            // Precio del paquete completo en el Punto de Venta (2026-11-18, AUTORIZO Gonzalo). Solo si el aparato lo tiene.
+            ...((p as any).precioVentaPaquete !== undefined ? { precio_venta_paquete: (p as any).precioVentaPaquete === null ? null : safeN((p as any).precioVentaPaquete) } : {}),
             created_at: p.createdAt,
             updated_at: p.updatedAt
         };

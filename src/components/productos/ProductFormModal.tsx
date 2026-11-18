@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { CATEGORIAS_DEFAULT } from '@/lib/seed-data';
+import { TIPOS_EMPAQUE, empaqueDesdeFormulario, precioVentaConMargen } from '@/lib/empaque-producto';
 import type { Categoria, Proveedor, Producto } from '@/types';
 
 const COLORES_RAPIDOS = [
@@ -146,6 +147,22 @@ export function ProductFormModal({
     const descMayorista = parseFloat(String(formData.descuentoMayorista).replace(',', '.')) || 0;
     const precioMayoristaFinal = pvpManual > 0 ? pvpManual * (1 - descMayorista / 100) : 0;
     const margenMayoristaFinal = costoReal > 0 && precioMayoristaFinal > 0 ? ((precioMayoristaFinal - costoReal) / precioMayoristaFinal) * 100 : 0;
+
+    // ── Compra por paquete, venta por unidad (2026-11-18) ──
+    const empaque = empaqueDesdeFormulario(formData);
+    const actualizarEmpaque = (cambios: Record<string, string>) => {
+        const nuevo = { ...formData, ...cambios };
+        const e = empaqueDesdeFormulario(nuevo);
+        if (e.porPaquete) {
+            nuevo.precioCosto = String(e.costoUnidad);
+            const m = parseFloat(nuevo.margenUtilidad);
+            if (tipoActual === 'elaborado' && m > 0) {
+                const pv = precioVentaConMargen(e.costoUnidad, m);
+                if (pv > 0) nuevo.precioVenta = String(pv);
+            }
+        }
+        setFormData(nuevo);
+    };
 
     const handleCrearCategoria = async () => {
         if (!miniNombre.trim() || !onAddCategoria) return;
@@ -448,7 +465,7 @@ export function ProductFormModal({
                             {/* Precio de costo con ícono $ y Toggle Heladería */}
                             <div className="space-y-1.5">
                                 <div className="flex items-center justify-between">
-                                    <Label className="text-xs font-semibold text-slate-500">Precio de Costo</Label>
+                                    <Label className="text-xs font-semibold text-slate-500">{empaque.porPaquete ? 'Costo por unidad (calculado)' : 'Precio de Costo'}</Label>
                                     <button
                                         type="button"
                                         onClick={() => setFormData({ ...formData, useHeladeriaCalc: !formData.useHeladeriaCalc })}
@@ -466,7 +483,7 @@ export function ProductFormModal({
                                     <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                     <Input
                                         type="number" step="0.01" min="0"
-                                        readOnly={formData.useHeladeriaCalc}
+                                        readOnly={formData.useHeladeriaCalc || empaque.porPaquete}
                                         value={formData.precioCosto}
                                         onChange={e => {
                                             const newCosto = e.target.value;
@@ -482,13 +499,67 @@ export function ProductFormModal({
                                         }}
                                         className={cn(
                                             "h-11 pl-9 text-base font-bold rounded-lg bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700",
-                                            formData.useHeladeriaCalc && "bg-slate-50 text-indigo-600 border-indigo-200 cursor-not-allowed"
+                                            (formData.useHeladeriaCalc || empaque.porPaquete) && "bg-slate-50 text-indigo-600 border-indigo-200 cursor-not-allowed"
                                         )}
                                         placeholder="0.00"
                                     />
                                 </div>
                             </div>
                         </div>
+
+                        {/* ── ¿Cómo lo compras? Paquete → costo por unidad (2026-11-18) ── */}
+                        {!formData.useHeladeriaCalc && (
+                            <div className="space-y-3">
+                                <Label className="text-xs font-semibold text-slate-500">¿Cómo lo compras al proveedor?</Label>
+                                <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Cómo lo compras">
+                                    {TIPOS_EMPAQUE.map(t => {
+                                        const activo = (formData.tipoEmbalaje || 'unidad') === t;
+                                        return (
+                                            <button key={t} type="button" role="radio" aria-checked={activo}
+                                                onClick={() => actualizarEmpaque(t === 'unidad'
+                                                    ? { tipoEmbalaje: 'unidad', unidadesPaquete: '1' }
+                                                    : { tipoEmbalaje: t, unidadesPaquete: (Number(formData.unidadesPaquete) > 1 ? String(formData.unidadesPaquete) : '') })}
+                                                className={cn(
+                                                    "h-10 px-4 rounded-full text-sm font-bold border-2 capitalize transition-all",
+                                                    activo
+                                                        ? "bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-900 dark:border-white"
+                                                        : "bg-white text-slate-700 border-slate-200 hover:border-slate-400 dark:bg-slate-900 dark:text-slate-200 dark:border-slate-700"
+                                                )}>
+                                                {t === 'unidad' ? 'Por unidad' : t}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                {(formData.tipoEmbalaje || 'unidad') !== 'unidad' && (
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="space-y-1.5">
+                                            <Label htmlFor="unidades-paquete" className="text-xs font-semibold text-slate-500">Unidades que trae la {formData.tipoEmbalaje}</Label>
+                                            <Input id="unidades-paquete" type="text" inputMode="numeric"
+                                                value={formData.unidadesPaquete ?? ''}
+                                                onChange={e => actualizarEmpaque({ unidadesPaquete: e.target.value.replace(/\D/g, '') })}
+                                                className="h-11 text-base font-bold rounded-lg bg-white dark:bg-slate-900"
+                                                placeholder="Ej: 24" />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <Label htmlFor="precio-paquete" className="text-xs font-semibold text-slate-500">Precio de la {formData.tipoEmbalaje} completa</Label>
+                                            <div className="relative">
+                                                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                                <Input id="precio-paquete" type="text" inputMode="numeric"
+                                                    value={formData.precioPaquete ?? ''}
+                                                    onChange={e => actualizarEmpaque({ precioPaquete: e.target.value.replace(/[^\d]/g, '') })}
+                                                    className="h-11 pl-9 text-base font-bold rounded-lg bg-white dark:bg-slate-900"
+                                                    placeholder="Ej: 12300" />
+                                            </div>
+                                        </div>
+                                        <p className="col-span-2 text-sm font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2">
+                                            {empaque.porPaquete
+                                                ? <>Cada unidad cuesta <b>{formatCurrency(empaque.costoUnidad)}</b> ({formatCurrency(empaque.precioPaquete)} ÷ {empaque.unidades}). En el Punto de Venta se vende por unidad; en Recepción se cuenta por {formData.tipoEmbalaje}.</>
+                                                : <>Escribe cuántas unidades trae y el precio de la {formData.tipoEmbalaje} completa.</>}
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         {/* [Nexus-Volt] Heladería Smart Calculator Mini-Form */}
                         {formData.useHeladeriaCalc && (
@@ -537,12 +608,13 @@ export function ProductFormModal({
                         )}
                     </div>
 
-                    {/* ── PRECIO DE VENTA Y MARGEN (solo Para Venta) ── */}
-                    {tipoActual === 'elaborado' && (
+                    {/* ── PRECIO DE VENTA Y MARGEN (también insumos que se venden, 2026-11-18) ── */}
+                    {(
+
                         <div className="p-5 rounded-xl bg-orange-50/60 dark:bg-orange-900/10 border border-orange-200 dark:border-orange-800/40 space-y-4">
                             <div className="flex items-center gap-2">
                                 <TrendingUp className="w-4 h-4 text-orange-500" />
-                                <span className="text-xs font-black uppercase tracking-widest text-orange-600 dark:text-orange-400">Precio de Venta y Margen</span>
+                                <span className="text-xs font-black uppercase tracking-widest text-orange-600 dark:text-orange-400">{tipoActual === 'elaborado' ? 'Precio de Venta y Margen' : 'Precio de venta (si también lo vendes en el Punto de Venta)'}</span>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
@@ -602,6 +674,22 @@ export function ProductFormModal({
                                     </div>
                                 </div>
                             </div>
+                            {empaque.porPaquete && (
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="precio-venta-paquete" className="text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wide">
+                                        Vender también la {formData.tipoEmbalaje} completa (x{empaque.unidades}) — opcional
+                                    </Label>
+                                    <div className="relative">
+                                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-orange-400" />
+                                        <Input id="precio-venta-paquete" type="text" inputMode="numeric"
+                                            value={formData.precioVentaPaquete ?? ''}
+                                            onChange={e => setFormData({ ...formData, precioVentaPaquete: e.target.value.replace(/[^\d]/g, '') })}
+                                            className="h-11 pl-9 text-base font-bold rounded-xl border-orange-200 dark:border-orange-800/40 bg-white dark:bg-slate-900"
+                                            placeholder={margen > 0 ? `Sugerido ${precioVentaConMargen(empaque.precioPaquete, margen)}` : 'Vacío = solo por unidad'} />
+                                    </div>
+                                    <p className="text-xs text-slate-600 dark:text-slate-300">Si lo llenas, en el Punto de Venta sale también "{formData.nombre || 'el producto'} (paquete x{empaque.unidades})" y al venderlo se descuentan {empaque.unidades} unidades del inventario.</p>
+                                </div>
+                            )}
                             
                             <div className="grid grid-cols-2 gap-4">
                                 {/* Descuento Mayorista */}
@@ -772,7 +860,7 @@ export function ProductFormModal({
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {/* Stock Actual */}
                             <div className="space-y-1.5">
-                                <Label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Stock Actual</Label>
+                                <Label className="text-sm font-semibold text-slate-700 dark:text-slate-300">{empaque.porPaquete ? `Stock actual EN UNIDADES (1 ${formData.tipoEmbalaje} = ${empaque.unidades})` : 'Stock Actual'}</Label>
                                 <div className="relative">
                                     <Package className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                     <Input

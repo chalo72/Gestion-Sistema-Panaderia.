@@ -53,6 +53,7 @@ import { TraspasoMesaModal } from '@/components/ventas/TraspasoMesaModal';
 import { ChecklistVitrinaModal } from '@/components/ventas/ChecklistVitrinaModal';
 import { encabezadosConClave } from '@/lib/clave-negocio';
 import { hoyLocal } from '@/lib/fecha-local';
+import { conTarjetasDePaquete, idBase, unidadesPorItem, productoDesdeId, lineaVenta } from '@/lib/venta-paquete';
 
 import type {
     Producto,
@@ -434,7 +435,8 @@ export function Ventas(props: VentasProps) {
             !selectedCategory ||
             categoriaNorm(p.categoria) === selectedCategory.toLowerCase().trim();
 
-        const catalogo = productos.filter((p) => esProductoBusquedaVenta(p) && enCategoria(p));
+        // Productos que también se venden por paquete salen con una segunda tarjeta "(paquete x48)"
+        const catalogo = conTarjetasDePaquete(productos.filter((p) => esProductoBusquedaVenta(p) && enCategoria(p)));
 
         if (deferredSearchTerm.trim().length > 0) {
             // POS: permite PVP 0 para poder corregir/cobrar; ranking inteligente
@@ -473,9 +475,11 @@ export function Ventas(props: VentasProps) {
             return;
         }
         // Validar stock disponible antes de agregar
-        const itemEnInventario = inventario.find(i => i.productoId === producto.id);
-        const cantidadEnCarrito = cart.find(i => i.producto.id === producto.id)?.cantidad || 0;
-        if (itemEnInventario && itemEnInventario.stockActual <= cantidadEnCarrito) {
+        // Stock en unidades: un paquete necesita todas sus unidades (y cuenta lo que ya hay en el carrito de las dos tarjetas)
+        const itemEnInventario = inventario.find(i => i.productoId === idBase(producto.id));
+        const unidadesEnCarrito = cart.filter(i => idBase(i.producto.id) === idBase(producto.id))
+            .reduce((t, i) => t + i.cantidad * unidadesPorItem(i.producto), 0);
+        if (itemEnInventario && itemEnInventario.stockActual < unidadesEnCarrito + unidadesPorItem(producto)) {
             toast.warning(`Stock insuficiente: solo ${itemEnInventario.stockActual} unidades disponibles`);
             return;
         }
@@ -499,8 +503,10 @@ export function Ventas(props: VentasProps) {
 
             // Bloquear subir cantidad por encima del stock (si hay registro de inventario)
             if (delta > 0) {
-                const inv = inventario.find(i => i.productoId === productoId);
-                if (inv && newQuantity > inv.stockActual) {
+                const inv = inventario.find(i => i.productoId === idBase(productoId));
+                const otras = prev.filter(i => i.producto.id !== productoId && idBase(i.producto.id) === idBase(productoId))
+                    .reduce((t, i) => t + i.cantidad * unidadesPorItem(i.producto), 0);
+                if (inv && newQuantity * unidadesPorItem(existing.producto) + otras > inv.stockActual) {
                     toast.warning(`Stock insuficiente: solo ${inv.stockActual} unidades disponibles`);
                     return prev;
                 }
@@ -713,7 +719,7 @@ export function Ventas(props: VentasProps) {
             if (!existingTab) {
                 // Crear pestaña y cargar productos del pedido
                 const cartItems = pedido ? pedido.items.map(item => {
-                    const prod = productos.find(p => p.id === item.productoId);
+                    const prod = productoDesdeId(item.productoId, productos);
                     return prod ? { producto: prod, cantidad: item.cantidad } : null;
                 }).filter(Boolean) as { producto: Producto; cantidad: number }[] : [];
 
@@ -836,7 +842,7 @@ export function Ventas(props: VentasProps) {
             const totalToPay = totalACobrar;
             const ventaData = {
                 items: cart.map(item => ({
-                    productoId: item.producto.id,
+                    ...lineaVenta(item.producto),
                     cantidad: item.cantidad,
                     precioUnitario: safeNumber(item.producto.precioVenta),
                     subtotal: Math.round(safeNumber(item.producto.precioVenta) * safeNumber(item.cantidad, 1) * 100) / 100

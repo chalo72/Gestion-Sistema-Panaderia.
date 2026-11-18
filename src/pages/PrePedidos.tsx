@@ -47,6 +47,7 @@ import { PrePedidoAddItemModal } from '@/components/prepedidos/PrePedidoAddItemM
 import { ProveedorCatalogoTactico } from '@/components/prepedidos/ProveedorCatalogoTactico';
 import { ComparadorPrecios } from '@/components/prepedidos/ComparadorPrecios';
 import type { PrePedido, Producto, Proveedor, PrecioProveedor, InventarioItem, OrdenProduccion, Receta, Categoria } from '@/types';
+import { unidadesQueEntran } from '@/lib/venta-paquete';
 
 // Convierte cualquier fecha (string ISO, timestamp numérico, Date) a string legible sin lanzar excepción
 const safeDate = (val: string | number | undefined | null, opts?: Intl.DateTimeFormatOptions): string => {
@@ -313,7 +314,7 @@ export default function PrePedidos({
           for (const item of pedido.items) {
             await onAjustarStock(
               item.productoId,
-              item.cantidad,
+              unidadesQueEntran(item.cantidad, productos.find(p => p.id === item.productoId)),
               'entrada',
               `Recepcion OC: ${pedido.nombre}`
             );

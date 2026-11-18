@@ -23,6 +23,7 @@ import { ProductPriceItem } from '@/components/productos/ProductPriceItem';
 import { IceCreamAssistantModal } from '@/components/productos/IceCreamAssistantModal';
 import { BeverageAssistantModal } from '@/components/productos/BeverageAssistantModal';
 import { db } from '@/lib/database';
+import { empaqueDesdeFormulario, precioProveedorDesdeEmpaque, camposEmpaqueParaEditar, numeroFormulario } from '@/lib/empaque-producto';
 
 interface ProductosProps {
     productos: Producto[];
@@ -93,7 +94,9 @@ export default function Productos({
         // [Nexus-Volt] Heladería Smart Fields
         useHeladeriaCalc: false, costoCaja: '', unidadesPorCaja: '', costoInsumoExtra: '',
         // [Nexus-Volt] Stock Fields
-        stockActual: '', stockMinimo: '5', descuentoMayorista: ''
+        stockActual: '', stockMinimo: '5', descuentoMayorista: '',
+        // Compra por paquete (paca x24 → costo por unidad)
+        tipoEmbalaje: 'unidad', unidadesPaquete: '1', precioPaquete: '', precioVentaPaquete: ''
     });
     const [nuevaCategoria, setNuevaCategoria] = useState({ nombre: '', color: COLORES_PRESET[0], tipo: 'venta' as 'venta' | 'insumo' });
 
@@ -136,7 +139,10 @@ export default function Productos({
         const parseSafe = (val: any) => parseFloat(String(val).replace(/\./g, '').replace(',', '.')) || 0;
         let precioVenta = parseSafe(formData.precioVenta);
         const margen = parseSafe(formData.margenUtilidad) || 30;
-        const costo = parseSafe(formData.precioCosto);
+        // Compra por paquete: el costo del producto es el de UNA unidad; al proveedor va la paca (2026-11-18)
+        const empaque = empaqueDesdeFormulario(formData);
+        const costo = empaque.porPaquete ? empaque.costoUnidad : parseSafe(formData.precioCosto);
+        const precioProv = precioProveedorDesdeEmpaque({ ...empaque, costoUnidad: costo });
         if (costo > 0 && precioVenta === 0) precioVenta = Math.round(costo * (1 + margen / 100) / 100) * 100;
         // Redondear siempre al múltiplo de 100 más cercano (moneda COP)
         if (precioVenta > 0) precioVenta = Math.round(precioVenta / 100) * 100;
@@ -154,6 +160,8 @@ export default function Productos({
             tipo: formData.tipo || 'elaborado', 
             unidadMedida: formData.unidadMedida || 'unidad', 
             costoBase: costo,
+            unidadesPaquete: empaque.unidades,
+            precioVentaPaquete: empaqueDesdeFormulario(formData).porPaquete && numeroFormulario(formData.precioVentaPaquete) > 0 ? numeroFormulario(formData.precioVentaPaquete) : null,
             stockActual: stockActualNum,
             stockMinimo: stockMinimoNum,
             descuentoMayorista: formData.descuentoMayorista === '' ? undefined : parseFloat(String(formData.descuentoMayorista).replace(',', '.')) || 0
@@ -164,11 +172,11 @@ export default function Productos({
         try {
             if (editingProducto) {
                 await onUpdateProducto(editingProducto.id, data);
-                if (formData.proveedorId && formData.precioCosto) await onAddOrUpdatePrecio({ productoId: editingProducto.id, proveedorId: formData.proveedorId, precioCosto: costo, notas: formData.notasPrecio });
+                if (formData.proveedorId && precioProv.precioCosto > 0) await onAddOrUpdatePrecio({ productoId: editingProducto.id, proveedorId: formData.proveedorId, ...precioProv, notas: formData.notasPrecio });
                 toast.success('✅ Producto actualizado correctamente');
             } else {
                 const np = await onAddProducto(data);
-                if (formData.proveedorId && formData.precioCosto) await onAddOrUpdatePrecio({ productoId: np.id, proveedorId: formData.proveedorId, precioCosto: costo, notas: formData.notasPrecio });
+                if (formData.proveedorId && precioProv.precioCosto > 0) await onAddOrUpdatePrecio({ productoId: np.id, proveedorId: formData.proveedorId, ...precioProv, notas: formData.notasPrecio });
                 toast.success('✅ Producto creado correctamente');
             }
             setIsDialogOpen(false); resetForm();
@@ -194,7 +202,8 @@ export default function Productos({
             nombre: '', categoria: '', descripcion: '', precioVenta: '', margenUtilidad: '30',
             proveedorId: '', precioCosto: '', notasPrecio: '', imagen: '', tipo: 'elaborado', unidadMedida: '',
             useHeladeriaCalc: false, costoCaja: '', unidadesPorCaja: '', costoInsumoExtra: '',
-            stockActual: '', stockMinimo: '5', descuentoMayorista: ''
+            stockActual: '', stockMinimo: '5', descuentoMayorista: '',
+            tipoEmbalaje: 'unidad', unidadesPaquete: '1', precioPaquete: '', precioVentaPaquete: ''
         });
         setEditingProducto(null);
     };
@@ -222,7 +231,10 @@ export default function Productos({
                 margenUtilidad: producto.margenUtilidad.toString(),
                 imagen: producto.imagen || '',
                 proveedorId: mp?.proveedorId || '',
-                precioCosto: mp?.precioCosto?.toString() || producto.costoBase?.toString() || '',
+                // Si el proveedor lo vende por paca, se muestra la paca aparte y el costo por unidad
+                // (antes la paca de $12.300 quedaba como costo de UNA unidad).
+                ...camposEmpaqueParaEditar(mp, producto),
+                precioVentaPaquete: producto.precioVentaPaquete ? String(producto.precioVentaPaquete) : '',
                 notasPrecio: mp?.notas || '',
                 tipo: producto.tipo || 'elaborado',
                 unidadMedida: (producto as any).unidadMedida || '',
