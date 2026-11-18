@@ -39,6 +39,7 @@ import { db, localAdapter } from '@/lib/database';
 import { mergeHydrateItem, timestampDeDoc, esCajaRevivida, valoresIguales, enLotes, creditoAtrasado } from '@/lib/sync-merge-local-gana';
 import { RESPALDOS_HORARIO } from '@/lib/horario-tienda';
 import { hoyLocal, ymdLocal } from '@/lib/fecha-local';
+import { tieneEventosNuevos } from '@/lib/historial-credito';
 
 const _sdb = new SupabaseDatabase();
 // Mapeadores internos de supabase-db (privados en TypeScript, pero son funciones normales).
@@ -336,6 +337,8 @@ function hayQueSubir(local: any, remoto: any | undefined, table?: string): boole
   if (table === 'creditos_trabajadores' || table === 'creditos_clientes') {
     if (creditoAtrasado(local, remoto)) return false;
     if (creditoAtrasado(remoto, local)) return true;
+    // Historial: si aquí hay eventos que la nube no tiene, se sube (ya unido con el de la nube)
+    if (table === 'creditos_trabajadores' && tieneEventosNuevos(local?.historial, remoto?.historial)) return true;
   }
   const lt = timestampDeDoc(local);
   const rt = timestampDeDoc(remoto);

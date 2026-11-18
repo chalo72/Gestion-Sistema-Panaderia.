@@ -12,6 +12,8 @@ import { EVENTO_HORARIO, leerAncla, leerCambios, leerEnlace, mapaNotasPeriodo, t
 import { puedeEditarHorario } from '@/lib/view-guards';
 import { ymdLocal } from '@/lib/fecha-local';
 import { diasDobleTurnoDe } from '@/lib/asistencia-lista';
+import { clasificarCreditoNomina, entraSoloEnNomina, nuevoEvento, conEvento, ultimaPosposicion } from '@/lib/historial-credito';
+import { OrigenCredito, HistorialCredito, PosponerCredito } from '@/components/nomina/HistorialCredito';
 import { useCan } from '@/contexts/AuthContext';
 import { db } from '@/lib/database';
 import { getBovedas, addMovimientoBoveda } from '@/lib/boveda-store';
@@ -184,9 +186,6 @@ const fechaDeCredito = (c: CreditoTrabajador): string => {
   return y || '1970-01-01';
 };
 
-/** Entra en esta quincena si se anotó el último día de ella o antes.
- *  Lo del 16 en adelante no entra en la primera (que cierra el 15). */
-const entraEnQuincena = (c: CreditoTrabajador, fin: string): boolean => fechaDeCredito(c) <= fin;
 
 // Cuánto se descuenta hoy: un número escrito a mano, o la cuota acordada, o todo el saldo si no hay cuota.
 // Un cero guardado ya no apaga el cobro: "hoy no se descuenta" quedó deshabilitado.
@@ -293,9 +292,20 @@ interface CreditCardProps {
   onEliminar?: () => void;
   onGuardarCuota?: (cuota: number) => void;
   formatCurrency: (n: number) => string;
+  /** No cobrar en esta quincena: pasa a la siguiente con su motivo (2026-11-18) */
+  onPosponer?: (motivo: string) => void | Promise<void>;
 }
 
-function CreditCard({ c, parciales, setParciales, estaPageada, descuentoGuardado, onEditar, onEliminar, formatCurrency }: CreditCardProps) {
+function CreditCard({ c, parciales, setParciales, estaPageada, descuentoGuardado, onEditar, onEliminar, formatCurrency, onPosponer }: CreditCardProps) {
+  const pospuesto = ultimaPosposicion(c.pagos);
+  const infoCredito = (
+    <div className="space-y-1">
+      <OrigenCredito c={c} />
+      {pospuesto && <p className="text-[11px] font-bold text-amber-700 dark:text-amber-300">Viene pospuesto: {pospuesto.nota}</p>}
+      <HistorialCredito c={c} />
+      {!estaPageada && onPosponer && <PosponerCredito onPosponer={onPosponer} />}
+    </div>
+  );
   const saldo = c.saldo;
   const montoActual  = montoACobrar(c, parciales);
   const quedaDespues = Math.max(0, saldo - montoActual);
@@ -367,6 +377,7 @@ function CreditCard({ c, parciales, setParciales, estaPageada, descuentoGuardado
             </ul>
           </div>
         )}
+        {infoCredito}
       </div>
     );
   }
@@ -454,6 +465,7 @@ function CreditCard({ c, parciales, setParciales, estaPageada, descuentoGuardado
           )}
         </div>
       )}
+      <div className="mt-2 border-t border-black/5 pt-2">{infoCredito}</div>
     </div>
   );
 }
@@ -511,6 +523,8 @@ export default function Nomina({
   const [diasVino, setDiasVino] = useState<Record<string, string[]>>({});
   // Días en que hizo doble turno, por trabajadora. Cada uno suma "valor del doble turno" al pago.
   const [diasDoble, setDiasDoble] = useState<Record<string, string[]>>({});
+  // Créditos de quincenas pasadas (llegaron tarde) que Gonzalo decidió cobrar en ESTA nómina
+  const [cobrarAhora, setCobrarAhora] = useState<Set<string>>(() => new Set());
   // Trabajadora cuyo calendario está en modo "marcar doble turno"
   const [marcandoDoble, setMarcandoDoble] = useState<string | null>(null);
   // Lo que se paga por cada doble turno, por trabajadora (si está vacío = valor de un día)
@@ -570,7 +584,7 @@ export default function Nomina({
 
   // ── Período nav ────────────────────────────────────────────────────────
   function limpiarEdicionesDeDias() {
-    setAjustes({}); setDiasMenos({}); setDiasExtra({}); setValorDiaEdit({}); setDiasVino({}); setDiasDoble({}); setMarcandoDoble(null); setExpandedWorker(null);
+    setAjustes({}); setDiasMenos({}); setDiasExtra({}); setValorDiaEdit({}); setDiasVino({}); setDiasDoble({}); setMarcandoDoble(null); setExpandedWorker(null); setCobrarAhora(new Set());
   }
   function anteriorQuincena() {
     limpiarEdicionesDeDias();
@@ -594,6 +608,19 @@ export default function Nomina({
       diasDoble[trabajadorId] ?? diasDobleTurnoDe(asistencia, trabajadorId, diasPeriodo),
     [diasDoble, asistencia, diasPeriodo],
   );
+  // Qué créditos se suman en ESTA nómina (2026-11-18): lo de la quincena, lo pospuesto a
+  // propósito y los préstamos en curso. Lo viejo que nunca se cobró ni se pospuso NO se suma
+  // solo: sale aparte en amarillo para que Gonzalo decida (cobrar ahora o posponer).
+  const entraEnEstaNomina = useCallback(
+    (c: CreditoTrabajador) => cobrarAhora.has(c.id) || entraSoloEnNomina(clasificarCreditoNomina(c, rango)),
+    [cobrarAhora, rango],
+  );
+  // Primer día de la quincena siguiente (a donde pasa lo pospuesto)
+  const siguienteInicio = useMemo(() => {
+    const d = new Date(rango.fin + 'T00:00:00');
+    d.setDate(d.getDate() + 1);
+    return ymdLocal(d);
+  }, [rango.fin]);
   const esActual    = periodo === hoy.periodo && mes === hoy.mes && año === hoy.año;
 
   const nominaExistente = useMemo(() =>
@@ -685,7 +712,7 @@ export default function Nomina({
       const montoDoble = Math.round(dobles.length * vDoble);
       const valorBruto = Math.max(0, valorBrutoCalculado - montoDiasMenos + montoDiasExtra + montoDoble + (ajustes[t.id] ?? 0));
       const credActivos = creditosTrabajadores.filter(
-        c => c.trabajadorId === t.id && c.estado === 'activo' && c.saldo > 0 && entraEnQuincena(c, rango.fin)
+        c => c.trabajadorId === t.id && c.estado === 'activo' && c.saldo > 0 && entraEnEstaNomina(c)
       );
       const descuentos = credActivos
         .map(c => {
@@ -724,7 +751,7 @@ export default function Nomina({
         _diasFaltados: diasFaltados,
       };
     });
-  }, [trabajadoresActivos, asistenciaMap, creditosTrabajadores, diasPeriodo, rango.fin, ajustes, cobroExtra, diasMenos, diasExtra, diasDoble, doblesDe, valorDoble, valorDiaEdit, diasVino, horasHabituales, hoyLocal, parciales, modoCalculo, notasPeriodo]);
+  }, [trabajadoresActivos, asistenciaMap, creditosTrabajadores, diasPeriodo, rango.fin, ajustes, cobroExtra, diasMenos, diasExtra, diasDoble, doblesDe, valorDoble, valorDiaEdit, diasVino, horasHabituales, hoyLocal, parciales, modoCalculo, notasPeriodo, entraEnEstaNomina]);
 
   // Cada trabajadora se paga por separado: las ya pagadas quedan "congeladas" tal como se guardaron;
   // las demás siguen calculándose en vivo.
@@ -796,7 +823,7 @@ export default function Nomina({
     const pagadosIds = new Set(items.filter(i => i._pagado).map(i => i.trabajadorId));
     const ids = new Set(trabajadoresActivos.filter(t => !pagadosIds.has(t.id)).map(t => t.id));
     return creditosTrabajadores
-      .filter(c => ids.has(c.trabajadorId) && c.estado === 'activo' && c.saldo > 0 && entraEnQuincena(c, rango.fin))
+      .filter(c => ids.has(c.trabajadorId) && c.estado === 'activo' && c.saldo > 0 && entraEnEstaNomina(c))
       .map(c => ({
         id: c.id,
         trabajadorId: c.trabajadorId,
@@ -996,7 +1023,7 @@ export default function Nomina({
           gastoId = gasto?.id;
         }
         const credsDeEsta = creditosTrabajadores.filter(c =>
-          c.trabajadorId === item.trabajadorId && c.estado === 'activo' && c.saldo > 0 && entraEnQuincena(c, rango.fin)
+          c.trabajadorId === item.trabajadorId && c.estado === 'activo' && c.saldo > 0 && entraEnEstaNomina(c)
         );
         for (const cred of credsDeEsta) {
           const desc = item.descuentos.find(d => d.creditoId === cred.id);
@@ -1010,11 +1037,17 @@ export default function Nomina({
           const movimiento: PagoCredito = {
             id: crypto.randomUUID(), creditoId: cred.id, monto, fecha: fechaHoy,
             metodoPago: 'descuento_nomina', nota, cobrada: monto > 0,
+            // No se cobró: queda pospuesto, con fecha, para la quincena siguiente (2026-11-18)
+            ...(monto > 0 ? {} : { posponerHasta: siguienteInicio }),
           };
+          const evento = nuevoEvento(monto > 0 ? 'cobrado' : 'pospuesto',
+            monto > 0
+              ? `Cobrado ${formatCurrency(monto)} en la nómina ${etiquetaQuincena}${cobrarAhora.has(cred.id) ? ' (era de una quincena anterior)' : ''}`
+              : `No se cobró en ${etiquetaQuincena}: pasa a la quincena siguiente`);
           const nuevoSaldo = Math.max(0, cred.saldo - monto);
           const cuota = cuotaDe(cred);
           await onUpdateCreditoTrabajador({
-            ...cred,
+            ...conEvento(cred, evento),
             cuota: cuota || undefined,
             saldo: nuevoSaldo,
             estado: nuevoSaldo <= 0 ? 'descontado' : 'activo',
@@ -1082,7 +1115,27 @@ export default function Nomina({
   }, [itemsDelPago, periodo, mes, año, rango, obsText, nominaExistente, creditosTrabajadores, trabajadoresActivos,
       onAddAsistencia, diasVino, horasHabituales, asistenciaMap, diasPeriodo, hoyLocal,
       onAddNomina, onUpdateNomina, onAddGasto, onUpdateCreditoTrabajador, formatCurrency, parciales,
-      partesFondo, usuario]);
+      partesFondo, usuario, entraEnEstaNomina, siguienteInicio]);
+
+  // Posponer un crédito: no se cobra en esta quincena, pasa a la siguiente con su motivo (2026-11-18)
+  const posponerCredito = useCallback(async (c: CreditoTrabajador, motivo: string) => {
+    const texto = motivo.trim() || 'sin motivo';
+    const movimiento: PagoCredito = {
+      id: crypto.randomUUID(), creditoId: c.id, monto: 0, fecha: hoyLocal,
+      metodoPago: 'descuento_nomina', cobrada: false, posponerHasta: siguienteInicio,
+      nota: `Pospuesto a la quincena del ${siguienteInicio} · ${texto}`,
+    };
+    try {
+      await onUpdateCreditoTrabajador({
+        ...conEvento(c, nuevoEvento('pospuesto', `Pospuesto a la quincena del ${siguienteInicio} · motivo: ${texto}`)),
+        pagos: [...(c.pagos || []), movimiento],
+      });
+      setCobrarAhora(prev => { const n = new Set(prev); n.delete(c.id); return n; });
+      toast.success('Pospuesto para la quincena siguiente');
+    } catch {
+      toast.error('No se pudo posponer');
+    }
+  }, [onUpdateCreditoTrabajador, siguienteInicio, hoyLocal]);
 
   // ── Gestión préstamos ──────────────────────────────────────────────────
   function abrirNuevoPrestamo(t: Trabajador) { setLoanModal({ trabajadorId: t.id, trabajadorNombre: t.nombre }); setLoanForm({ ...ESTADO_CREDITO_VACÍO }); }
@@ -1757,8 +1810,9 @@ export default function Nomina({
             {items.map(item => {
               const trabajadora = trabajadores.find(t => t.id === item.trabajadorId);
               const credActivos = creditosTrabajadores.filter(c => c.trabajadorId === item.trabajadorId && c.estado === 'activo');
-              const credDeEsta = credActivos.filter(c => entraEnQuincena(c, rango.fin));
-              const credDespues = credActivos.filter(c => !entraEnQuincena(c, rango.fin) && c.saldo > 0);
+              const credDeEsta = credActivos.filter(c => entraEnEstaNomina(c));
+              const credDespues = credActivos.filter(c => c.saldo > 0 && !entraEnEstaNomina(c) && ['futuro', 'pospuesto_futuro'].includes(clasificarCreditoNomina(c, rango)));
+              const credAtrasados = credActivos.filter(c => c.saldo > 0 && !entraEnEstaNomina(c) && clasificarCreditoNomina(c, rango) === 'atrasado');
               const prestamosActivos = credDeEsta.filter(c => !esConsumoProductos(c));
               const consumoActivos   = credDeEsta.filter(c => esConsumoProductos(c));
               const estaPageada = item._pagado;
@@ -2125,6 +2179,7 @@ export default function Nomina({
                             descuentoGuardado={estaPageada ? item.descuentos.find(d => d.creditoId === c.id) : undefined}
                             onEditar={!estaPageada && trabajadora ? () => abrirEditarPrestamo(trabajadora, c) : undefined}
                             onEliminar={!estaPageada ? () => setConfirmDelete(c) : undefined}
+                            onPosponer={!estaPageada ? (motivo) => posponerCredito(c, motivo) : undefined}
                             onGuardarCuota={!estaPageada ? (cuota) => {
                               onUpdateCreditoTrabajador({ ...c, cuota, descontarDeSalario: true, pagos: pagosConCuota({ ...c, cuota }, cuota) });
                             } : undefined}
@@ -2143,6 +2198,7 @@ export default function Nomina({
                             descuentoGuardado={estaPageada ? item.descuentos.find(d => d.creditoId === c.id) : undefined}
                             onEditar={!estaPageada && trabajadora ? () => abrirEditarPrestamo(trabajadora, c) : undefined}
                             onEliminar={!estaPageada ? () => setConfirmDelete(c) : undefined}
+                            onPosponer={!estaPageada ? (motivo) => posponerCredito(c, motivo) : undefined}
                             formatCurrency={formatCurrency} />
                         ))}
                       </div>
@@ -2152,6 +2208,36 @@ export default function Nomina({
                         className="flex items-center gap-1.5 text-xs text-violet-600 dark:text-violet-400 font-bold hover:underline mt-1">
                         <Plus className="w-3.5 h-3.5" /> Anotar un préstamo nuevo (total prestado y cuota de cada quincena)
                       </button>
+                    )}
+                    {credAtrasados.length > 0 && (
+                      <div className="rounded-xl border-2 border-amber-500 bg-amber-50 dark:bg-amber-950/30 px-3 py-3 space-y-3">
+                        <p className="text-sm font-black text-amber-900 dark:text-amber-200">De quincenas pasadas: no se cobraron ni se pospusieron. NO se suman solos.</p>
+                        <p className="text-xs font-semibold text-amber-900 dark:text-amber-200">Revisa quién y cuándo los anotó. Decide: cobrar en esta nómina o posponer.</p>
+                        {!estaPageada && credAtrasados.length > 1 && (
+                          <button type="button" onClick={() => setCobrarAhora(prev => { const n = new Set(prev); credAtrasados.forEach(c => n.add(c.id)); return n; })}
+                            className="h-10 px-4 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-bold">
+                            Cobrar todos en esta nómina ({credAtrasados.length} · {formatCurrency(credAtrasados.reduce((t, c) => t + (Number(c.saldo) || 0), 0))})
+                          </button>
+                        )}
+                        {credAtrasados.map(c => (
+                          <div key={c.id} className="rounded-lg bg-white dark:bg-gray-900 border border-amber-300 dark:border-amber-700 p-2 space-y-1.5">
+                            <p className="text-sm font-bold text-gray-900 dark:text-white">
+                              {c.descripcion || (esConsumoProductos(c) ? 'Consumo' : 'Préstamo')} · {formatCurrency(c.saldo)} · del {fechaDeCredito(c)}
+                            </p>
+                            <OrigenCredito c={c} />
+                            <HistorialCredito c={c} />
+                            {!estaPageada && (
+                              <div className="flex flex-wrap items-center gap-3">
+                                <button type="button" onClick={() => setCobrarAhora(prev => new Set(prev).add(c.id))}
+                                  className="h-9 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold">
+                                  Cobrar en esta nómina
+                                </button>
+                                <PosponerCredito onPosponer={(motivo) => posponerCredito(c, motivo)} />
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     )}
                     {credDespues.length > 0 && (
                       <div className="rounded-xl border-2 border-emerald-800 bg-white px-3 py-3 space-y-1">

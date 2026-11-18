@@ -17,6 +17,7 @@ import { formatCurrency } from '@/lib/utils';
 import type { Trabajador, CreditoTrabajador, Cliente, CreditoCliente } from '@/types';
 import { sumarConsumo, creditoConsumoAbierto } from '@/lib/consumo-clientes';
 import { achicarFoto } from '@/lib/achicar-foto';
+import { OrigenCredito, HistorialCredito } from '@/components/nomina/HistorialCredito';
 
 const PREFIJO_CLIENTE = 'cli:';
 
@@ -411,6 +412,10 @@ export default function FiadosEmpleados({
                               {isPrestamo && <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full uppercase tracking-widest font-black">Préstamo</span>}
                             </p>
                             <p className="text-xs text-slate-500 mt-0.5">{c.descripcion}</p>
+                            <div className="mt-1 space-y-0.5">
+                              <OrigenCredito c={c} />
+                              <HistorialCredito c={c} />
+                            </div>
                             <div className="flex gap-2 items-center mt-1.5">
                               <span className="text-[10px] text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full font-medium">
                                 {new Date(c.fecha).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}

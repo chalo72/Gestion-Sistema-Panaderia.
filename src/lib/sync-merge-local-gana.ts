@@ -1,3 +1,4 @@
+import { unirHistorial } from './historial-credito';
 /**
  * Merge nube ↔ local (política del Director):
  * - Mismo aparato: local ya está al día al guardar.
@@ -190,7 +191,10 @@ export const mergeHydrateItem = <T extends { id: string }>(
 
   // Créditos: un cobro de nómina nunca se deshace (ver mergeCreditoCobroGana, 2026-11-18)
   if (collection === 'creditos_trabajadores' || collection === 'creditos_clientes') {
-    return mergeCreditoCobroGana(local, cloud, mergeHydrateItem('_credito', local, cloud));
+    const unido = mergeCreditoCobroGana(local, cloud, mergeHydrateItem('_credito', local, cloud));
+    // Historial: se juntan los eventos de los dos lados (nadie pierde quién anotó qué)
+    const hist = unirHistorial((local as any).historial, (cloud as any).historial);
+    return (hist.length > 0 ? { ...unido, historial: hist } : unido) as T;
   }
 
   // Caja: un cierre nunca se deshace. Si cualquiera de los dos lados la tiene cerrada,
