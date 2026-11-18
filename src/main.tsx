@@ -9,9 +9,18 @@ import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 import './index.css'
 import { NexusDiagnostics } from '@/lib/nexus-diagnostics'
 import { describirErrorInicio, AVISO_NO_BORRAR_DATOS } from '@/lib/error-inicio'
+import { marcarAparatoEnHtml, diagnosticoAparato } from '@/lib/aparato-lento'
 
 // Exponer herramientas de diagnóstico Nexus
 NexusDiagnostics.expose();
+
+// [Rendimiento en celulares de baja gama] 2026-10-04, autorizado por Gonzalo.
+// Marca el <html> con data-aparato="lento" o "normal" ANTES de dibujar, para que
+// el CSS del final de index.css apague el desenfoque solo en aparatos lentos.
+// Si el navegador no da datos del aparato, queda "normal" y nada cambia.
+// Para ver que detecto:  diagnosticoAparato()  en la consola del navegador.
+marcarAparatoEnHtml();
+(window as any).diagnosticoAparato = diagnosticoAparato;
 
 // [Polyfill Crítico para Celulares / Red Local]
 // Safari/Chrome en iOS/Android deshabilitan generateUUID() cuando se accede por HTTP (no HTTPS).

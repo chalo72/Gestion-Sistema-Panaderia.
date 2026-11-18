@@ -58,8 +58,16 @@ function tokensBusqueda(term: string): string[] {
     .filter((t) => t.length > 0 && !STOP.has(t));
 }
 
-function textoBuscable(p: Producto): string {
-  return normTexto([p.nombre, p.categoria, p.descripcion].filter(Boolean).join(' '));
+function palabras(s: string | undefined | null): string[] {
+  return normTexto(s).split(/[\s,/.\-_+()]+/).filter(Boolean);
+}
+
+/** Variantes singulares: "panes" → "pane", "pan"; "tortas" → "torta". */
+function variantesToken(tok: string): string[] {
+  const v = [tok];
+  if (tok.length >= 4 && tok.endsWith('es')) v.push(tok.slice(0, -2));
+  if (tok.length >= 4 && tok.endsWith('s')) v.push(tok.slice(0, -1));
+  return v;
 }
 
 /** Distancia de edición simple (typos: bogui/boggy). */
@@ -84,41 +92,51 @@ function distanciaEdicion(a: string, b: string): number {
   return prev[n];
 }
 
+/**
+ * Coincidencia estricta de una palabra del query contra las palabras de un campo:
+ * - inicio de palabra ("pan" → "Pan Francés", NO "Empanada")
+ * - dentro de palabra solo si el término tiene ≥ 4 letras ("bono" → "pandebono")
+ * - typo de 1 letra solo con términos ≥ 5 letras ("boggi" → "boggy")
+ */
 function tokenCoincideEnPalabras(tok: string, words: string[]): boolean {
-  for (const w of words) {
-    if (w.includes(tok) || tok.includes(w) && w.length >= 3) return true;
-    if (w.startsWith(tok) || tok.startsWith(w) && w.length >= 3) return true;
-    // Typo 1 letra si ambas ≥ 4 (boggy ↔ boggi, gelatina ↔ gelatina)
-    if (tok.length >= 4 && w.length >= 4 && distanciaEdicion(tok, w) <= 1) return true;
+  for (const t of variantesToken(tok)) {
+    for (const w of words) {
+      if (w.startsWith(t)) return true;
+      if (t.length >= 4 && w.includes(t)) return true;
+      if (t.length >= 5 && w.length >= 4) {
+        if (distanciaEdicion(t, w) <= 1) return true;
+        if (w.length > t.length && distanciaEdicion(t, w.slice(0, t.length)) <= 1) return true;
+      }
+    }
   }
   return false;
 }
 
-/** ¿El término encaja? Todas las palabras deben aparecer (o prefijo / typo leve). */
-export function coincideBusquedaProducto(p: Producto, term: string): boolean {
+function coincideCampo(campo: string | undefined | null, term: string): boolean {
   const q = normTexto(term);
   if (!q) return false;
-  const haystack = textoBuscable(p);
-  if (haystack.includes(q)) return true;
-
+  const texto = normTexto(campo);
+  if (!texto) return false;
+  if (q.length >= 3 && q.includes(' ') && texto.includes(q)) return true;
   const tokens = tokensBusqueda(term);
-  if (tokens.length === 0) return haystack.includes(q);
+  if (tokens.length === 0) return false;
+  const words = palabras(campo);
+  return tokens.every((tok) => tokenCoincideEnPalabras(tok, words));
+}
 
-  const words = haystack.split(' ').filter(Boolean);
+/** Todas las palabras del query aparecen en el NOMBRE. */
+export function coincideNombreProducto(p: Producto, term: string): boolean {
+  return coincideCampo(p.nombre, term);
+}
 
-  // Primero: TODAS las palabras (búsqueda precisa)
-  if (tokens.every((tok) => haystack.includes(tok) || tokenCoincideEnPalabras(tok, words))) {
-    return true;
-  }
+/** Todas las palabras del query aparecen en la CATEGORÍA. */
+export function coincideCategoriaProducto(p: Producto, term: string): boolean {
+  return coincideCampo(p.categoria, term);
+}
 
-  // Si falla el AND: con 2+ tokens, basta que UNA palabra fuerte (≥4) coincida
-  // (así "gelatina boggy" encuentra "Gelatina Boggy Fresa" aunque escriban mal una)
-  const fuertes = tokens.filter((t) => t.length >= 4);
-  if (fuertes.length >= 1) {
-    return fuertes.some((tok) => haystack.includes(tok) || tokenCoincideEnPalabras(tok, words));
-  }
-
-  return false;
+/** ¿El término encaja por nombre o, si no, por categoría? (todas las palabras, sin OR). */
+export function coincideBusquedaProducto(p: Producto, term: string): boolean {
+  return coincideNombreProducto(p, term) || coincideCategoriaProducto(p, term);
 }
 
 function scoreMatch(p: Producto, term: string): number {
@@ -130,18 +148,16 @@ function scoreMatch(p: Producto, term: string): number {
   else if (name.includes(q)) score += 200;
 
   const tokens = tokensBusqueda(term);
-  const words = name.split(' ').filter(Boolean);
-  for (const tok of tokens) {
-    if (name.startsWith(tok)) score += 80;
+  const words = palabras(p.nombre);
+  tokens.forEach((tok, i) => {
+    if (words[i] && words[i].startsWith(tok)) score += 100;
+    else if (name.startsWith(tok)) score += 80;
     else if (words.some((w) => w.startsWith(tok))) score += 40;
-    else if (name.includes(tok)) score += 20;
     else if (tokenCoincideEnPalabras(tok, words)) score += 15;
-  }
+  });
 
-  // Bonus si TODAS las palabras del query están en el nombre
-  if (tokens.length > 1 && tokens.every((t) => name.includes(t) || tokenCoincideEnPalabras(t, words))) {
-    score += 120;
-  }
+  // Nombres cortos primero ante empate: "Pan" antes que "Pan de queso con bocadillo grande"
+  score -= Math.min(words.length, 10) * 2;
 
   const pv = Number(p.precioVenta) || 0;
   if (pv > 0) score += 30;
@@ -203,7 +219,22 @@ export function buscarProductosVenta(
     base = base.filter((p) => (Number(p.precioVenta) || 0) > 0);
   }
 
-  const matched = base.filter((p) => coincideBusquedaProducto(p, term));
+  // 1) Por NOMBRE (todas las palabras). Si hay resultados, solo esos: nada de "todo el catálogo".
+  // 2) Si ningún nombre encaja, por CATEGORÍA ("hojaldres", "postres").
+  // 3) Último recurso, solo si 1 y 2 están vacíos: alguna palabra fuerte (≥ 4) en el nombre.
+  let matched = base.filter((p) => coincideNombreProducto(p, term));
+  if (matched.length === 0) {
+    matched = base.filter((p) => coincideCategoriaProducto(p, term));
+  }
+  if (matched.length === 0) {
+    const fuertes = tokensBusqueda(term).filter((t) => t.length >= 4);
+    if (fuertes.length >= 2) {
+      matched = base.filter((p) => {
+        const words = palabras(p.nombre);
+        return fuertes.some((tok) => tokenCoincideEnPalabras(tok, words));
+      });
+    }
+  }
   const unique = deduplicarPorNombre(matched);
 
   return unique
@@ -211,11 +242,9 @@ export function buscarProductosVenta(
       let sa = scoreMatch(a, term);
       let sb = scoreMatch(b, term);
       if (priorizarNombre) {
-        const na = normTexto(a.nombre);
-        const nb = normTexto(b.nombre);
-        const tokens = tokensBusqueda(term);
-        if (tokens.some((t) => na.includes(t))) sa += 80;
-        if (tokens.some((t) => nb.includes(t))) sb += 80;
+        const qa = normTexto(term);
+        if (normTexto(a.nombre).startsWith(qa)) sa += 80;
+        if (normTexto(b.nombre).startsWith(qa)) sb += 80;
       }
       if (sb !== sa) return sb - sa;
       return normTexto(a.nombre).localeCompare(normTexto(b.nombre));

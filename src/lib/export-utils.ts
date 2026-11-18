@@ -1,3 +1,4 @@
+import { hoyLocal } from '@/lib/fecha-local';
 /**
  * Exporta datos a un archivo CSV compatible con Excel de forma premium.
  * Incluye BOM para que Excel detecte correctamente los caracteres especiales (tildes, Ñ).
@@ -29,7 +30,7 @@ export const exportToExcel = (data: any[], fileName: string) => {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.setAttribute("href", url);
-  link.setAttribute("download", `${fileName}_${new Date().toISOString().split('T')[0]}.csv`);
+  link.setAttribute("download", `${fileName}_${hoyLocal()}.csv`);
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

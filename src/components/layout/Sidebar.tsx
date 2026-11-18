@@ -1,3 +1,4 @@
+import React from 'react';
 import {
   LayoutDashboard,
   Package,
@@ -43,6 +44,7 @@ import { cn } from '@/lib/utils';
 import type { Producto, Proveedor, PrecioProveedor } from '@/types';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { usePermisosModulos } from '@/hooks/usePermisosModulos';
+import { puedeVerModuloMenu } from '@/lib/view-guards';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useState, useEffect } from 'react';
@@ -88,7 +90,7 @@ interface MenuGroup {
   items: MenuItem[];
 }
 
-export function Sidebar({
+export const Sidebar = React.memo(function Sidebar({
   currentView,
   onViewChange,
   alertasNoLeidas,
@@ -228,7 +230,7 @@ export function Sidebar({
         { id: 'trabajadores',  label: 'Trabajadores',         icon: UserCircle2,    permission: 'VER_USUARIOS' },
         { id: 'expedientes',   label: 'Expediente Empleadas', icon: FileCheck,      permission: 'VER_USUARIOS' },
         { id: 'asistencia',    label: 'Asistencia',           icon: CalendarCheck,  permission: 'VER_DASHBOARD' },
-        { id: 'nomina',        label: 'Nómina',               icon: Wallet,         permission: 'VER_FINANZAS' },
+        { id: 'nomina',        label: 'Horario',               icon: Wallet,         permission: 'VER_DASHBOARD' },
         { id: 'usuarios',      label: 'Equipo de Trabajo',    icon: Users,          permission: 'VER_USUARIOS' },
         { id: 'roles',         label: 'Seguridad y Roles',    icon: Shield,      permission: 'VER_USUARIOS' },
         { id: 'seguridad',     label: 'Agente Anti-Fraude',   icon: Shield,      permission: 'VER_FINANZAS' },
@@ -246,7 +248,7 @@ export function Sidebar({
         if (role === 'PANADERO' && (i.id === 'agentes-ia' || i.id === 'videovigilancia' || i.id === 'cctv' || i.id === 'comunicaciones')) {
           return false;
         }
-        return check(i.permission as any) && puedeVer(role ?? '', i.id);
+        return check(i.permission as any) && puedeVerModuloMenu(role ?? '', i.id, puedeVer);
       })
     }))
     .filter(g => g.items.length > 0);
@@ -516,7 +518,7 @@ export function Sidebar({
         { id: 'trabajadores' as ViewType,   label: 'Trabajadores',         icon: UserCircle2,     permission: 'VER_USUARIOS' },
         { id: 'expedientes' as ViewType,    label: 'Expediente Empleadas', icon: FileCheck,       permission: 'VER_DASHBOARD' },
         { id: 'asistencia' as ViewType,     label: 'Asistencia',           icon: CalendarCheck,   permission: 'VER_DASHBOARD' },
-        { id: 'nomina' as ViewType,         label: 'Nómina',               icon: Wallet,          permission: 'VER_FINANZAS' },
+        { id: 'nomina' as ViewType,         label: 'Horario',               icon: Wallet,          permission: 'VER_DASHBOARD' },
         { id: 'seguridad' as ViewType,      label: 'Anti-Fraude',          icon: Shield,          permission: 'VER_FINANZAS' },
         { id: 'roles' as ViewType,          label: 'Seguridad y Roles',    icon: Shield,          permission: 'VER_USUARIOS' },
         { id: 'configuracion' as ViewType,  label: 'Configuración',        icon: Settings,        permission: 'VER_CONFIGURACION' },
@@ -530,7 +532,7 @@ export function Sidebar({
       ...cat,
       items: cat.items.filter(i => {
         if (role === 'PANADERO' && (i.id === 'agentes-ia' || i.id === 'videovigilancia' || i.id === 'cctv' || i.id === 'comunicaciones')) return false;
-        return check(i.permission as any) && puedeVer(role ?? '', i.id);
+        return check(i.permission as any) && puedeVerModuloMenu(role ?? '', i.id, puedeVer);
       }),
     }))
     .filter(cat => cat.items.length > 0);
@@ -627,5 +629,4 @@ export function Sidebar({
       {renderSidebarContent()}
     </aside>
   );
-}
-
+});

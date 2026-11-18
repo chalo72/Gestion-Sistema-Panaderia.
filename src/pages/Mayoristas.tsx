@@ -8,7 +8,7 @@ import {
     ShieldCheck, Percent, ArrowRight, ShoppingCart, ArrowLeft, Search, UserCheck,
     Minus, Receipt, Banknote, Clock, PlayCircle, Camera, History, ImageIcon,
     Smartphone, CreditCard, PlusCircle, ChevronRight, Folder, Building2, Edit2,
-    MessageCircle, StickyNote, Send, ChevronLeft, Star, Printer
+    MessageCircle, StickyNote, Send, ChevronLeft, Star, Printer, Truck
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -24,10 +24,15 @@ import { useAuth } from '@/contexts/AuthContext';
 import type { Producto, PrecioProveedor, Cliente } from '@/types';
 import { ProductAvatar } from '@/components/ui/ProductAvatar';
 import { exportCSV, getExportFilename } from '@/lib/exportUtils';
+import RutasReparto from '@/components/mayoristas/RutasReparto';
+import PanEmpaqueModal, { type FuenteCosto } from '@/components/mayoristas/PanEmpaqueModal';
 
 import type { ClienteMayorista, MetodoPago, Abono, TicketPendiente, HistorialMayorista, MayoristasProps } from '@/types/mayoristas';
 
 // Clientes se manejan por props ahora
+
+// Mayoristas = VENDER (precios, tickets, rutas). Créditos Clientes = COBRAR (saldos, abonos, vencimientos).
+const COBROS_SOLO_EN_CREDITOS = true;
 
 import { cargarConfig, guardarConfig, calcularCosto } from '@/lib/mayoristas-utils';
 import { useConfirmar } from '@/hooks/useConfirmar';
@@ -45,9 +50,39 @@ const TIPO_CONFIG: Record<string, { label: string; color: string; bg: string }> 
 };
 
 // ─── Componente principal ────────────────────────────────────────────────────
-export default function Mayoristas({ productos, precios, clientes: allClientes, addCliente, updateCliente, deleteCliente, getMejorPrecio, formatCurrency, onNavigateTo, cajaActiva, registrarVenta, creditosClientes, addCreditoCliente, updateCreditoCliente, deleteCreditoCliente, registrarPagoCredito }: MayoristasProps) {
+export default function Mayoristas({ productos: productosProp, precios, clientes: allClientes, addCliente, updateCliente, deleteCliente, getMejorPrecio, formatCurrency, onNavigateTo, cajaActiva, registrarVenta, creditosClientes, addCreditoCliente, updateCreditoCliente, deleteCreditoCliente, registrarPagoCredito }: MayoristasProps) {
     const { usuario } = useAuth();
     const { confirmar, dialogo } = useConfirmar();
+    // ── Pan de empaque / mayoreo: productos creados o editados aquí se ven sin recargar ──
+    const [productosLocales, setProductosLocales] = useState<Producto[]>([]);
+    const productos = useMemo(() => {
+        if (productosLocales.length === 0) return productosProp;
+        const m = new Map(productosProp.map(p => [p.id, p]));
+        productosLocales.forEach(p => m.set(p.id, { ...(m.get(p.id) || {}), ...p } as Producto));
+        return Array.from(m.values());
+    }, [productosProp, productosLocales]);
+    // Costo real por pan que calcula Producción (Modelos de pan enlazados al producto)
+    const [modelosPan, setModelosPan] = useState<any[]>([]);
+    useEffect(() => { db.getAllModelosPan().then((m: any) => setModelosPan(Array.isArray(m) ? m : [])).catch(() => {}); }, []);
+    const costoProduccion = useMemo(() => {
+        const m = new Map<string, number>();
+        for (const mp of modelosPan) {
+            const c = Number(mp?.costoUnitario) || 0;
+            if (c <= 0) continue;
+            for (const id of [mp?.productoId, mp?.productoCatalogoId]) if (id && !m.has(id)) m.set(id, c);
+        }
+        return m;
+    }, [modelosPan]);
+    // Orden: Producción > proveedor > costo del catálogo. Si no hay ninguno se estima como antes, pero queda marcado 'estimado' (no real).
+    const resolverCosto = useCallback((p: Producto, mejorPrecio: PrecioProveedor | null): { costo: number; fuente: FuenteCosto } => {
+        const cp = costoProduccion.get(p.id);
+        if (cp && cp > 0) return { costo: cp, fuente: 'produccion' };
+        if (mejorPrecio?.precioCosto && mejorPrecio.precioCosto > 0) return { costo: calcularCosto(p, mejorPrecio), fuente: 'proveedor' };
+        if (p.costoBase && p.costoBase > 0) return { costo: p.costoBase, fuente: 'catalogo' };
+        let est = calcularCosto(p, null);
+        if (est <= 0 && p.precioVenta > 0) est = p.precioVenta / 1.30;
+        return { costo: est, fuente: 'estimado' };
+    }, [costoProduccion]);
     // Config de márgenes
     const [config, setConfig] = useState(cargarConfig);
     const [editandoConfig, setEditandoConfig] = useState(false);
@@ -108,12 +143,32 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
     // Estado de Pestañas
     const [activeTab, setActiveTab] = useState('precios');
 
-    // Clientes — Filtrados de la DB Maestra
-    // 🛡️ NEXUS-GUARD: Mostramos TODOS los clientes (excepto trabajadores)
-    // Esto evita que clientes válidos queden ocultos si se guardaron sin tipo o con tipo 'particular'
+    // Filtros de negocio (Director 2026-10): mayoreo = panes propios + clientes tienda/mayorista.
+    // Persistidos; se pueden apagar para ver todo (compatibilidad con datos viejos sin tipo).
+    const [soloProduccionPropia, setSoloProduccionPropia] = useState(() => {
+        try {
+            const v = localStorage.getItem('ag_mayoristas_solo_elaborados');
+            return v === null ? true : v === '1';
+        } catch { return true; }
+    });
+    const [soloClientesMayoreo, setSoloClientesMayoreo] = useState(() => {
+        try {
+            const v = localStorage.getItem('ag_mayoristas_solo_clientes_mayoreo');
+            return v === null ? true : v === '1';
+        } catch { return true; }
+    });
+
+    const TIPOS_MAYOREO = useMemo(
+        () => new Set(['mayorista', 'tienda', 'distribuidor', 'vendedor', 'empresa']),
+        []
+    );
+
+    // Clientes — por defecto solo mayoreo/tienda; sin filtro = todos excepto trabajadores
     const clientes = useMemo(() => {
-        return allClientes.filter(c => c.tipo !== 'trabajador');
-    }, [allClientes]);
+        const base = allClientes.filter(c => c.tipo !== 'trabajador');
+        if (!soloClientesMayoreo) return base;
+        return base.filter(c => TIPOS_MAYOREO.has(String(c.tipo || '').toLowerCase()));
+    }, [allClientes, soloClientesMayoreo, TIPOS_MAYOREO]);
 
     const [showModalCliente, setShowModalCliente] = useState(false);
     const [editandoCliente, setEditandoCliente] = useState<Cliente | null>(null);
@@ -599,7 +654,14 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
     const [perfilTab, setPerfilTab] = useState<'creditos' | 'pagados'>('creditos');
     const [busquedaTicket, setBusquedaTicket] = useState('');
 
+    // Separación 2026-10-08: Mayoristas VENDE; los cobros y abonos viven SOLO en Créditos Clientes.
+    const irACobrarEnCreditos = () => {
+        toast.info('Los abonos y cobros se registran en Créditos Clientes.');
+        if (onNavigateTo) onNavigateTo('creditos');
+    };
+
     const registrarAbono = async (historialId: string, metodo: MetodoPago, montoEspecifico?: number) => {
+        if (COBROS_SOLO_EN_CREDITOS) { irACobrarEnCreditos(); return; }
         const monto = montoEspecifico ?? parseFloat(montoAbono);
         if (isNaN(monto) || monto <= 0) return toast.error('Monto inválido');
 
@@ -948,8 +1010,8 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
     const tablaDatos = useMemo(() => {
         return productos
             .filter(p => {
-                // 🔥 No ocultaremos NADA en Mayorista. 
-                // Permite ver insumos (si venden insumos al por mayor) y productos sin precio.
+                // Por defecto solo producción propia (elaborados). Apagar el filtro para ver insumos/gaseosas.
+                if (soloProduccionPropia && p.tipo !== 'elaborado') return false;
                 return true;
             })
             .filter(p => !busqueda ||
@@ -958,8 +1020,8 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
             )
             .map(p => {
                 const mejorPrecio = getMejorPrecio(p.id);
-                let costo = calcularCosto(p, mejorPrecio);
-                if (costo <= 0 && p.precioVenta > 0) costo = p.precioVenta / 1.30;
+                const rc = resolverCosto(p, mejorPrecio);
+                let costo = rc.costo;
                 
                 // Aunque no se pueda calcular costo, no ocultaremos el producto
                 // Para que el usuario lo vea y pueda fijarle precio manualmente
@@ -1006,6 +1068,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                 return {
                     producto: p,
                     costo,
+                    costoFuente: rc.fuente,
                     precioMinPanaderia,
                     precioMayorista,
                     precioMayoristaAuto,
@@ -1027,7 +1090,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                 const orden = { excelente: 0, viable: 1, ajustado: 2, inviable: 3 };
                 return orden[a.viabilidad] - orden[b.viabilidad];
             });
-    }, [productos, getMejorPrecio, config.margenNegocio, margenRevendedorEfectivo, busqueda, preciosOverride]);
+    }, [productos, getMejorPrecio, config.margenNegocio, margenRevendedorEfectivo, busqueda, preciosOverride, soloProduccionPropia, resolverCosto]);
 
     // Helper: normaliza categoría para comparaciones sin importar tildes/mayúsculas
     const normCat = (c: string | undefined) => (c || 'Sin categoría').toLowerCase().trim();
@@ -1037,10 +1100,13 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
     // tombstoneIds NO se aplica aquí: si el producto está en state, es porque no fue borrado.
     // El tombstone solo guarda contra sync; filtrar por él aquí causa inconsistencias.
     const tablaDatosTodos = useMemo(() => {
-        const mapped = productos.map(p => {
+        const fuente = soloProduccionPropia
+            ? productos.filter(p => p.tipo === 'elaborado')
+            : productos;
+        const mapped = fuente.map(p => {
                 const mejorPrecio = getMejorPrecio(p.id);
-                let costo = calcularCosto(p, mejorPrecio);
-                if (costo <= 0 && p.precioVenta > 0) costo = p.precioVenta / 1.30;
+                const rc = resolverCosto(p, mejorPrecio);
+                let costo = rc.costo;
                 const precioMinPanaderia = costo;
                 let precioMayoristaAuto = costo * (1 + config.margenNegocio / 100);
                 if ((p as any).descuentoMayorista !== undefined && (p as any).descuentoMayorista > 0) {
@@ -1064,7 +1130,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                 else viabilidad = 'inviable';
                 const descuentoMonto = pvp - precioMayorista;
                 const descuentoPct = pvp > 0 ? (descuentoMonto / pvp) * 100 : 0;
-                return { producto: p, costo, precioMinPanaderia, precioMayoristaAuto, precioMayorista, tieneOverride, precioReventa, pvp, margenPanaderiaReal, margenRevendedorReal, gananciaPanaderiaPorUnidad, gananciRevendedorPorUnidad, reventaMenorQuePVP, panaderiaGana, revendedorGana, viabilidad, descuentoMonto, descuentoPct };
+                return { producto: p, costo, costoFuente: rc.fuente, precioMinPanaderia, precioMayoristaAuto, precioMayorista, tieneOverride, precioReventa, pvp, margenPanaderiaReal, margenRevendedorReal, gananciaPanaderiaPorUnidad, gananciRevendedorPorUnidad, reventaMenorQuePVP, panaderiaGana, revendedorGana, viabilidad, descuentoMonto, descuentoPct };
             });
 
         // Cuando varios proveedores venden el mismo producto, mostrar solo el de mayor rentabilidad
@@ -1080,7 +1146,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                 const orden = { excelente: 0, viable: 1, ajustado: 2, inviable: 3 };
                 return orden[a.viabilidad] - orden[b.viabilidad];
             });
-    }, [productos, getMejorPrecio, config.margenNegocio, margenRevendedorEfectivo, preciosOverride]);
+    }, [productos, getMejorPrecio, config.margenNegocio, margenRevendedorEfectivo, preciosOverride, soloProduccionPropia, resolverCosto]);
 
     const productosEditTicketFiltrados = useMemo(() => {
         if (!busquedaEditTicket) return tablaDatosTodos;
@@ -1363,6 +1429,97 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
         setPerfilTab('pagados');
     };
 
+    // ── Pan de empaque: crear / editar con % para la tienda y % del repartidor ──
+    const [panEmpaque, setPanEmpaque] = useState<{ abierto: boolean; producto: Producto | null }>({ abierto: false, producto: null });
+    const abrirPanEmpaque = (producto: Producto | null = null) => setPanEmpaque({ abierto: true, producto });
+    const guardarPanEmpaque = async (d: { nombre: string; categoria: string; unidadesPaquete: number; precioVenta: number; descuentoMayorista: number; comisionRepartidor: number }): Promise<boolean> => {
+        const ahora = new Date().toISOString();
+        const editando = panEmpaque.producto;
+        const dup = productos.find(p => p.id !== editando?.id && p.nombre.trim().toLowerCase() === d.nombre.trim().toLowerCase());
+        if (dup) { toast.error(`Ya existe un producto llamado "${dup.nombre}". Edítelo desde su tarjeta.`); return false; }
+        const prod: Producto = editando
+            ? { ...editando, ...d, updatedAt: ahora }
+            : {
+                id: generateUUID(), nombre: d.nombre, categoria: d.categoria, descripcion: `Paquete x${d.unidadesPaquete}`,
+                precioVenta: d.precioVenta, margenUtilidad: 0, tipo: 'elaborado', costoBase: 0,
+                descuentoMayorista: d.descuentoMayorista, comisionRepartidor: d.comisionRepartidor, unidadesPaquete: d.unidadesPaquete,
+                createdAt: ahora, updatedAt: ahora,
+            };
+        try {
+            if (editando) await db.updateProducto(prod); else await db.addProducto(prod);
+        } catch (e) {
+            console.error('[Mayoristas] No se pudo guardar pan de empaque', e);
+            toast.error('No se pudo guardar el producto');
+            return false;
+        }
+        setProductosLocales(prev => [...prev.filter(p => p.id !== prod.id), prod]);
+        // El % manda: se quita un precio manual viejo que lo tapaba
+        if (preciosOverride[prod.id] !== undefined) setOverridePrecio(prod.id, null);
+        toast.success(editando ? 'Precios de mayoreo guardados' : `"${prod.nombre}" creado. Regístrelo en Producción para que salga su costo.`);
+        return true;
+    };
+    const categoriasCatalogo = Array.from(new Set(productos.filter(p => p.tipo === 'elaborado').map(p => p.categoria).filter(Boolean))).sort();
+    const costoPanEmpaque = panEmpaque.producto
+        ? (() => { const pe = panEmpaque.producto!; const rc = resolverCosto(pe, getMejorPrecio(pe.id)); return { valor: rc.costo, fuente: rc.fuente }; })()
+        : null;
+    const modalPanEmpaque = (
+        <PanEmpaqueModal
+            abierto={panEmpaque.abierto}
+            producto={panEmpaque.producto}
+            costo={costoPanEmpaque}
+            categorias={categoriasCatalogo}
+            formatCurrency={formatCurrency}
+            onCerrar={() => setPanEmpaque({ abierto: false, producto: null })}
+            onGuardar={guardarPanEmpaque}
+        />
+    );
+
+    // ── Resumen del pedido: repartidor, costo y lo que le queda a la panadería ──
+    const resumenPedido = carritoPos.length === 0 ? null : carritoPos.reduce((acc, it) => {
+        const p = productos.find(x => x.id === it.productoId);
+        acc.comision += Math.round(it.precio * ((p?.comisionRepartidor || 0) / 100)) * it.cantidad;
+        const rc = p ? resolverCosto(p, getMejorPrecio(p.id)) : null;
+        if (!rc || rc.fuente === 'estimado') acc.sinCosto += 1; else acc.costo += rc.costo * it.cantidad;
+        return acc;
+    }, { comision: 0, costo: 0, sinCosto: 0 });
+    const gananciaPedido = resumenPedido ? totalCarrito - resumenPedido.comision - resumenPedido.costo : 0;
+
+    // ── Ticket de despacho (imprimir / PDF / WhatsApp) ──
+    const metodoLabelDespacho: Record<string, string> = { efectivo: 'Efectivo', nequi: 'Nequi', transferencia: 'Transferencia', credito: 'Crédito' };
+    const imprimirTicketDespacho = (cliente: { nombre: string }) => {
+        if (carritoPos.length === 0) return;
+        const fecha = new Date().toLocaleString('es-CO', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        const unidades = carritoPos.reduce((s, i) => s + i.cantidad, 0);
+        const filas = carritoPos.map(i => `<tr><td>${escapeHtml(i.nombre)}</td><td class="c">${i.cantidad}</td><td class="r">${formatCurrency(i.precio)}</td><td class="r">${formatCurrency(i.precio * i.cantidad)}</td></tr>`).join('');
+        const html = `<!doctype html><html><head><meta charset="utf-8"><title>Despacho - ${escapeHtml(cliente.nombre)}</title>
+<style>body{font-family:Arial,sans-serif;max-width:380px;margin:0 auto;padding:12px;color:#111}h1{font-size:18px;margin:0;text-align:center}p{margin:3px 0;font-size:12px}
+table{width:100%;border-collapse:collapse;margin-top:8px;font-size:12px}th,td{border-bottom:1px dashed #999;padding:4px 2px;text-align:left}.c{text-align:center}.r{text-align:right}
+.t{font-size:16px;font-weight:bold;text-align:right;margin-top:8px}.f{margin-top:40px;border-top:1px solid #111;text-align:center;font-size:12px;padding-top:4px}@media print{button{display:none}}</style></head><body>
+<h1>Panadería Dulce Placer</h1><p style="text-align:center"><b>TICKET DE DESPACHO</b></p>
+<p><b>Cliente:</b> ${escapeHtml(cliente.nombre)}</p><p><b>Fecha:</b> ${fecha}</p>
+<table><thead><tr><th>Producto</th><th class="c">Cant.</th><th class="r">Precio</th><th class="r">Subtotal</th></tr></thead><tbody>${filas}</tbody></table>
+<p class="t">TOTAL: ${formatCurrency(totalCarrito)}</p><p>Cantidad total: ${unidades}</p><p>Forma de pago: ${metodoLabelDespacho[metodoPagoSeleccionado] || metodoPagoSeleccionado}</p>
+<div class="f">Recibido por (nombre y firma)</div>
+<p style="text-align:center;margin-top:16px"><button onclick="window.print()">Imprimir / PDF</button></p></body></html>`;
+        const win = window.open('', '_blank', 'width=420,height=700');
+        if (!win) { toast.error('Habilita ventanas emergentes para ver el ticket'); return; }
+        win.document.write(html);
+        win.document.close();
+        win.focus();
+        setTimeout(() => win.print(), 400);
+    };
+    const whatsappTicketDespacho = (cliente: { nombre: string; telefono?: string | null }) => {
+        if (carritoPos.length === 0) return;
+        const tel = (cliente.telefono || '').replace(/\D/g, '');
+        const fecha = new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' });
+        const lineas = [
+            '🥐 *DULCE PLACER*', '🧾 *TICKET DE DESPACHO*', `👤 ${cliente.nombre}`, `📅 ${fecha}`, '',
+            ...carritoPos.map(i => `• ${i.cantidad} x ${i.nombre} — ${formatCurrency(i.precio)} = *${formatCurrency(i.precio * i.cantidad)}*`),
+            '', `💰 *TOTAL: ${formatCurrency(totalCarrito)}*`, `Forma de pago: ${metodoLabelDespacho[metodoPagoSeleccionado] || metodoPagoSeleccionado}`,
+        ];
+        window.open(`https://wa.me/${tel}?text=${encodeURIComponent(lineas.join('\n'))}`, '_blank');
+    };
+
     // ── Mini-POS del Cliente ─────────────────────────────────────────────────
     if (viendoPerfilCliente) {
         const cliente = viendoPerfilCliente;
@@ -1391,6 +1548,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
         return (
             <div className="min-h-screen flex flex-col gap-0 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
                 {dialogo}
+                {modalPanEmpaque}
 
                 {/* Header */}
                 <div className="flex items-center justify-between gap-4 bg-white dark:bg-slate-900 px-5 py-4 border-b border-slate-100 dark:border-slate-800 shadow-sm sticky top-0 z-20">
@@ -1758,8 +1916,8 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                             </div>
                                                                         </div>
                                                                     ) : (
-                                                                        <button onClick={()=>{setAbonandoId(h.id);setMontoAbono('');}} className="w-full h-7 rounded-xl bg-indigo-600 text-white text-[9px] font-black uppercase hover:bg-indigo-700 flex items-center justify-center gap-1">
-                                                                            <Plus className="w-3 h-3"/> Registrar abono
+                                                                        <button onClick={irACobrarEnCreditos} className="w-full h-7 rounded-xl bg-indigo-600 text-white text-[9px] font-black uppercase hover:bg-indigo-700 flex items-center justify-center gap-1">
+                                                                            <Plus className="w-3 h-3"/> Cobrar en Créditos
                                                                         </button>
                                                                     )}
 
@@ -1875,6 +2033,13 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                     className="h-10 pl-9 rounded-xl border-slate-200 bg-white text-xs font-bold"
                                 />
                             </div>
+                            <button
+                                type="button"
+                                onClick={() => abrirPanEmpaque(null)}
+                                className="w-full h-11 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-md active:scale-[0.98] transition-all"
+                            >
+                                <PlusCircle className="w-4 h-4" /> Nuevo pan de empaque
+                            </button>
 
                             {/* Filtro por categoría — scroll horizontal, sin wrap */}
                             {categoriasPerfil.length > 1 && (
@@ -2147,8 +2312,8 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                                     </div>
                                                                                 </div>
                                                                             ) : (
-                                                                                <button onClick={()=>{setAbonandoId(h.id);setMontoAbono('');}} className="w-full h-7 rounded-xl bg-indigo-600 text-white text-[9px] font-black uppercase hover:bg-indigo-700 flex items-center justify-center gap-1">
-                                                                                    <Plus className="w-3 h-3"/> Registrar abono
+                                                                                <button onClick={irACobrarEnCreditos} className="w-full h-7 rounded-xl bg-indigo-600 text-white text-[9px] font-black uppercase hover:bg-indigo-700 flex items-center justify-center gap-1">
+                                                                                    <Plus className="w-3 h-3"/> Cobrar en Créditos
                                                                                 </button>
                                                                             )}
 
@@ -2317,6 +2482,19 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                         EN TICKET
                                                     </div>
                                                 )}
+                                                {d.costoFuente === 'estimado' && (
+                                                    <div className="absolute bottom-1.5 left-1.5 bg-amber-500 text-white font-black text-[7px] px-1.5 py-0.5 rounded-md z-10 shadow" title="Sin costo real: regístrelo en Producción">
+                                                        SIN COSTO
+                                                    </div>
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    onClick={e => { e.preventDefault(); e.stopPropagation(); abrirPanEmpaque(d.producto); }}
+                                                    className="absolute bottom-1.5 right-1.5 w-6 h-6 rounded-md bg-white/90 text-indigo-600 flex items-center justify-center z-10 shadow hover:bg-indigo-600 hover:text-white transition-colors"
+                                                    title="Editar precios de mayoreo (% tienda y % repartidor)"
+                                                >
+                                                    <Percent className="w-3 h-3" />
+                                                </button>
                                                 {(d.producto as any).descuentoMayorista > 0 && (
                                                     <div className="absolute top-1.5 left-1.5 bg-rose-500 text-white font-black text-[7px] px-1.5 py-0.5 rounded-md z-10 shadow">
                                                         -{(d.producto as any).descuentoMayorista}%
@@ -2653,6 +2831,24 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                 <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Total</span>
                                 <span className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">{formatCurrency(totalCarrito)}</span>
                             </div>
+                            {resumenPedido && (
+                                <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 p-2.5 space-y-1 text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                                    <div className="flex justify-between"><span>Para el repartidor</span><span className="tabular-nums">− {formatCurrency(resumenPedido.comision)}</span></div>
+                                    <div className="flex justify-between"><span>Costo de producción</span><span className="tabular-nums">{resumenPedido.sinCosto > 0 ? `${resumenPedido.sinCosto} producto(s) sin costo` : `− ${formatCurrency(resumenPedido.costo)}`}</span></div>
+                                    <div className={cn("flex justify-between font-black", resumenPedido.sinCosto > 0 ? "text-amber-600" : gananciaPedido > 0 ? "text-emerald-600" : "text-rose-600")}>
+                                        <span>Le queda a la panadería</span>
+                                        <span className="tabular-nums">{resumenPedido.sinCosto > 0 ? "Pendiente" : formatCurrency(gananciaPedido)}</span>
+                                    </div>
+                                </div>
+                            )}
+                            <div className="grid grid-cols-2 gap-2">
+                                <Button type="button" variant="outline" disabled={carritoPos.length === 0} onClick={() => imprimirTicketDespacho(cliente)} className="h-10 rounded-xl font-black uppercase text-[10px] tracking-widest gap-1.5">
+                                    <Printer className="w-4 h-4" /> Ticket despacho
+                                </Button>
+                                <Button type="button" variant="outline" disabled={carritoPos.length === 0} onClick={() => whatsappTicketDespacho(cliente as any)} className="h-10 rounded-xl font-black uppercase text-[10px] tracking-widest gap-1.5 text-emerald-700 border-emerald-200">
+                                    <MessageCircle className="w-4 h-4" /> WhatsApp
+                                </Button>
+                            </div>
                             {/* Foto de factura */}
                             {fotoFactura ? (
                                 <div className="relative">
@@ -2970,8 +3166,8 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                                 </div>
                                                                             </div>
                                                                         ) : (
-                                                                            <button onClick={() => { setAbonandoId(h.id); setMontoAbono(''); }} className="text-[9px] font-black uppercase text-indigo-600 hover:text-indigo-700 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 rounded w-full flex justify-center items-center gap-1 transition-colors">
-                                                                                <Plus className="w-3 h-3" /> Abonar a esta factura
+                                                                            <button onClick={irACobrarEnCreditos} className="text-[9px] font-black uppercase text-indigo-600 hover:text-indigo-700 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 rounded w-full flex justify-center items-center gap-1 transition-colors">
+                                                                                <Plus className="w-3 h-3" /> Cobrar en Créditos
                                                                             </button>
                                                                         )}
                                                                     </div>
@@ -3019,6 +3215,14 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                             return formatCurrency(tot - ab);
                                         })()}</span>
                                     </div>
+                                    {COBROS_SOLO_EN_CREDITOS && (
+                                        <button
+                                            onClick={irACobrarEnCreditos}
+                                            className="mt-2 w-full h-9 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-[9px] font-black uppercase flex items-center justify-center gap-2 transition-colors"
+                                        >
+                                            <CreditCard className="w-3.5 h-3.5" /> Cobrar / abonar en Créditos Clientes
+                                        </button>
+                                    )}
                                     {/* Enviar tickets seleccionados por WhatsApp */}
                                     {facturasSeleccionadas.size > 0 && (() => {
                                         const sel = historialUnificado.filter(p => p.clienteId === cliente.id && facturasSeleccionadas.has(p.id));
@@ -3039,8 +3243,8 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                             </div>
                                         );
                                     })()}
-                                    {/* Abono parcial a tickets seleccionados */}
-                                    {facturasSeleccionadas.size > 0 && (() => {
+                                    {/* Abono parcial a tickets seleccionados — movido a Créditos Clientes */}
+                                    {!COBROS_SOLO_EN_CREDITOS && facturasSeleccionadas.size > 0 && (() => {
                                         const sel = historialUnificado.filter(p =>
                                             p.clienteId === cliente.id &&
                                             facturasSeleccionadas.has(p.id) &&
@@ -3091,8 +3295,8 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                             </div>
                                         );
                                     })()}
-                                    {/* Confirmar pago completo de créditos seleccionados */}
-                                    {facturasSeleccionadas.size > 0 && (() => {
+                                    {/* Confirmar pago completo de créditos seleccionados — movido a Créditos Clientes */}
+                                    {!COBROS_SOLO_EN_CREDITOS && facturasSeleccionadas.size > 0 && (() => {
                                         const sel = historialUnificado.filter(p => p.clienteId === cliente.id && facturasSeleccionadas.has(p.id) && p.metodoPago === 'credito');
                                         const saldoTotal = sel.reduce((s, h) => { const ab = (h.abonos ?? []).reduce((sa, a) => sa + a.monto, 0); return s + Math.max(0, h.total - ab); }, 0);
                                         if (sel.length === 0 || saldoTotal <= 0) return null;
@@ -3406,10 +3610,10 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                 </div>
                                             ) : (
                                                 <button
-                                                    onClick={() => { setAbonandoId(h.id); setMontoAbono(''); }}
+                                                    onClick={irACobrarEnCreditos}
                                                     className="w-full h-9 rounded-xl border border-dashed border-rose-300 text-rose-500 hover:bg-rose-50 flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-colors"
                                                 >
-                                                    <PlusCircle className="w-3.5 h-3.5" /> Registrar abono · debe {formatCurrency(saldoPendiente)}
+                                                    <PlusCircle className="w-3.5 h-3.5" /> Cobrar en Créditos · debe {formatCurrency(saldoPendiente)}
                                                 </button>
                                             )
                                         )}
@@ -3458,6 +3662,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
     return (
         <div className="min-h-full flex flex-col gap-5 max-md:gap-3 p-4 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
             {dialogo}
+            {modalPanEmpaque}
 
             {/* ── Header ──────────────────────────────────────────────────── */}
             <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 max-md:gap-3 bg-white dark:bg-slate-900 px-5 py-4 max-md:px-4 max-md:py-3 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
@@ -3467,9 +3672,8 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                     </div>
                     <div>
                         <h2 className="text-xl font-black text-slate-900 dark:text-white">Ventas al Mayor</h2>
-                        {/* En celular el subtítulo ocupaba 3 líneas antes de poder tocar nada */}
                         <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-0.5 max-md:hidden">
-                            Precios para tiendas y vendedores · Sin perder, con ganancia para todos
+                            Precios, ventas y rutas a tiendas · Los cobros y abonos se hacen en Créditos Clientes
                         </p>
                     </div>
                 </div>
@@ -3574,6 +3778,9 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                     <TabsTrigger value="clientes" className="rounded-xl h-9 px-4 max-md:flex-1 max-md:h-11 max-md:px-2 max-md:text-[11px] max-md:tracking-wide font-black uppercase text-xs tracking-widest data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
                         <Users className="w-4 h-4 mr-2 max-md:mr-1" /> Clientes ({clientes.length})
                     </TabsTrigger>
+                    <TabsTrigger value="rutas" className="rounded-xl h-9 px-4 font-black uppercase text-xs tracking-widest data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
+                        <Truck className="w-4 h-4 mr-2" /> Rutas y Despachos
+                    </TabsTrigger>
                 </TabsList>
 
                 {/* ══════════════════════════════════════════════════
@@ -3621,6 +3828,45 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                 </button>
                             )}
                         </div>
+                        <button
+                            onClick={() => {
+                                setSoloProduccionPropia(v => {
+                                    const next = !v;
+                                    try { localStorage.setItem('ag_mayoristas_solo_elaborados', next ? '1' : '0'); } catch { /* ignore */ }
+                                    return next;
+                                });
+                            }}
+                            className={cn('flex items-center gap-2 px-4 h-10 rounded-xl text-xs font-black uppercase tracking-widest border transition-all',
+                                soloProduccionPropia ? 'bg-amber-600 text-white border-amber-600' : 'border-slate-200 dark:border-slate-700 text-muted-foreground hover:border-amber-300'
+                            )}
+                            title="Solo panes/productos elaborados en la panadería (no gaseosas ni dulces de otra proveedora)"
+                        >
+                            <Package className="w-3.5 h-3.5" />
+                            Solo producción propia
+                        </button>
+                        <button
+                            onClick={() => abrirPanEmpaque(null)}
+                            className="flex items-center gap-2 px-4 h-10 rounded-xl text-xs font-black uppercase tracking-widest bg-indigo-600 hover:bg-indigo-700 text-white transition-all"
+                        >
+                            <PlusCircle className="w-3.5 h-3.5" />
+                            Nuevo pan de empaque
+                        </button>
+                        <button
+                            onClick={() => {
+                                setSoloClientesMayoreo(v => {
+                                    const next = !v;
+                                    try { localStorage.setItem('ag_mayoristas_solo_clientes_mayoreo', next ? '1' : '0'); } catch { /* ignore */ }
+                                    return next;
+                                });
+                            }}
+                            className={cn('flex items-center gap-2 px-4 h-10 rounded-xl text-xs font-black uppercase tracking-widest border transition-all',
+                                soloClientesMayoreo ? 'bg-indigo-600 text-white border-indigo-600' : 'border-slate-200 dark:border-slate-700 text-muted-foreground hover:border-indigo-300'
+                            )}
+                            title="Solo clientes mayorista/tienda/distribuidor (oculta particulares/retail)"
+                        >
+                            <Users className="w-3.5 h-3.5" />
+                            Solo mayoreo/tienda
+                        </button>
                         <button
                             onClick={() => setSoloViables(v => !v)}
                             className={cn('flex items-center gap-2 px-4 h-10 max-md:h-11 rounded-xl text-xs font-black uppercase tracking-widest border transition-all',
@@ -4018,6 +4264,29 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                         </div>
                         );
                     })()}
+                </TabsContent>
+
+                {/* ══════════════════════════════════════════════════
+                    TAB 3: RUTAS Y DESPACHOS (vendedor sale a las tiendas)
+                ══════════════════════════════════════════════════ */}
+                <TabsContent value="rutas" className="mt-0">
+                    <RutasReparto
+                        catalogo={tablaDatosTodos.map(t => ({
+                            productoId: t.producto.id,
+                            nombre: t.producto.nombre,
+                            categoria: t.producto.categoria,
+                            costo: t.costo,
+                            precioMayorista: t.precioMayorista,
+                            pvp: t.pvp,
+                        }))}
+                        clientes={clientes}
+                        config={config}
+                        creditosClientes={creditosClientes}
+                        addCreditoCliente={addCreditoCliente}
+                        updateCliente={updateCliente}
+                        formatCurrency={formatCurrency}
+                        usuarioId={usuario?.id || 'admin'}
+                    />
                 </TabsContent>
             </Tabs>
 

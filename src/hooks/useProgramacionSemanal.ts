@@ -7,6 +7,7 @@ import type {
   DiaProduccionPerdido,
 } from '@/types';
 import { generateUUID } from '@/lib/safe-utils';
+import { ymdLocal } from '@/lib/fecha-local';
 
 // ─── Constants ───────────────────────────────────────────
 const STORAGE_KEY_PROGRAMACION = 'dp_programacion_semanal';
@@ -32,7 +33,7 @@ export function getLunesDeSemana(fecha: Date = new Date()): string {
   const day = d.getDay();
   const diff = day === 0 ? -6 : 1 - day; // adjust for Sunday
   d.setDate(d.getDate() + diff);
-  return d.toISOString().split('T')[0];
+  return ymdLocal(d);
 }
 
 /** Índice del día en nuestra convención: 0=Lunes…6=Domingo */

@@ -48,6 +48,7 @@ import type {
 } from '@/types';
 import { descargarPdfFormulacion } from '@/lib/ficha-tecnica-pdf';
 import { calcularCostoLineaInsumo, precioPorKg } from '@/lib/costo-insumo';
+import { hoyLocal } from '@/lib/fecha-local';
 
 interface ProduccionProps {
     produccion: OrdenProduccion[];
@@ -152,7 +153,7 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
             }
             
             await addAuditoria({
-                fecha: new Date().toISOString().split('T')[0],
+                fecha: hoyLocal(),
                 formulacionId: formId,
                 cantidadArrobas: arrobas,
                 masaTotalKg,
@@ -345,8 +346,18 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
     };
 
     const handleCompletarOrden = async (orden: OrdenProduccion) => {
+        // Pregunta la cantidad REAL que salió del horno (antes siempre asumía la planeada).
+        const input = window.prompt(
+            `¿Cuántas unidades salieron realmente? (Planeado: ${orden.cantidadPlaneada})`,
+            String(orden.cantidadPlaneada)
+        );
+        if (input === null) return; // canceló, no completar
+        const cantidadIngresada = parseFloat(input);
+        const cantidadReal = Number.isFinite(cantidadIngresada) && cantidadIngresada >= 0
+            ? cantidadIngresada
+            : orden.cantidadPlaneada;
         try {
-            await finalizarProduccion(orden.id, orden.cantidadPlaneada);
+            await finalizarProduccion(orden.id, cantidadReal);
         } catch (error) {
             toast.error('Error al finalizar la producción');
         }
@@ -416,7 +427,7 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
 
                 await addOrdenProduccion({
                     productoId: prodElaborado.id, // Producto real
-                    cantidadPlaneada: item.panes,
+                    cantidadPlaneada: item.panes || Math.round(item.arrobas * modelo.panesPorArroba),
                     cantidadCompletada: 0,
                     usuarioId: 'sistema', // o usuario actual
                     costoEstimadoTotal: formulacion.costoTotalArroba * item.arrobas,

@@ -3,6 +3,7 @@
  * contra el catálogo de productos y precios por proveedor.
  */
 import { matchProductoEnCatalogo } from '@/lib/ocr-service';
+import { detectarPersonaFamiliaEnTexto } from '@/lib/familia-duenos';
 import type { Gasto, GastoCategoria, Producto, PrecioProveedor } from '@/types';
 
 const CATEGORIAS_VALIDAS: GastoCategoria[] = [
@@ -11,6 +12,7 @@ const CATEGORIAS_VALIDAS: GastoCategoria[] = [
   'Materia Prima',
   'Nómina',
   'Mantenimiento',
+  'Familia',
   'Otros',
 ];
 
@@ -53,6 +55,7 @@ export function normalizarCategoriaGasto(raw?: string | null): GastoCategoria {
   if (/^insumos?$|^empaques?$|^materia\s*prima|^ingrediente/.test(low)) return 'Materia Prima';
   if (/servicio|luz|agua|internet|gas|telefono|acueducto/.test(low)) return 'Servicios';
   if (/arriendo|canon|local/.test(low)) return 'Arriendo';
+  if (/^familia$|retiro\s*(familiar|propietario|dueno|dueño)/.test(low)) return 'Familia';
   if (/nomina|salario|sueldo/.test(low)) return 'Nómina';
   if (/mantenimiento|reparacion/.test(low)) return 'Mantenimiento';
   if (/operativo|mecato|venta|reventa/.test(low)) return 'Otros';
@@ -196,6 +199,17 @@ function inferirMateriaPrima(text: string): InferenciaCategoriaGasto | null {
 
 function inferirPorPalabrasClave(descripcion: string): InferenciaCategoriaGasto | null {
   const text = sinAcentos(descripcion);
+
+  const personaFam = detectarPersonaFamiliaEnTexto(descripcion);
+  if (personaFam || /\b(retiro\s*(familiar|familia|propietario|dueno|dueño)|plata\s+(para|de)\s+familia|gasto\s+familiar)\b/.test(text)) {
+    return {
+      categoria: 'Familia',
+      confianza: personaFam ? 'alta' : 'media',
+      razon: personaFam
+        ? `Retiro de familia detectado: ${personaFam.nombre}`
+        : 'Palabra clave de retiro familiar',
+    };
+  }
 
   if (/\b(nomina|salario|sueldo|prestacion)\b/.test(text)) {
     return { categoria: 'Nómina', confianza: 'media', razon: 'Palabra clave de nómina' };

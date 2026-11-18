@@ -15,7 +15,7 @@ import { mergeHydrateItem } from './sync-merge-local-gana';
  */
 
 const DB_NAME = 'dulce-placer-db';
-const DB_VERSION = 8;
+const DB_VERSION = 9;
 /** Máximo de espera al abrir IndexedDB antes de fallar en vez de quedarse colgado en el logo. */
 export const INIT_TIMEOUT_MS = 15000;
 
@@ -52,6 +52,7 @@ const COLLECTIONS = [
   'agente_config',
   'bitacora_ia',
   'asistencia',
+  'checklist_completadas',
   'nominas',
   'auditorias_produccion',
   'planes_diarios',
@@ -66,8 +67,25 @@ export class IndexedDBAdapter implements DatabaseAdapter {
   /** Abre (o crea) la base de datos y registra todos los Object Stores. Idempotente. */
   async init(): Promise<void> {
     if (this.initPromise) return this.initPromise;
-    this.initPromise = new Promise((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, DB_VERSION);
+    this.initPromise = this.abrir(DB_VERSION).catch((error: any) => {
+      // Si el navegador YA tiene una versión MÁS NUEVA de la base (pasa cuando se
+      // publica por error una copia vieja de la app), IndexedDB lanza VersionError
+      // y la app se quedaba en pantalla de "Error Crítico de Inicio".
+      // Aquí abrimos la versión que ya existe en vez de dejar la app inservible.
+      const nombre = error?.name || '';
+      if (nombre === 'VersionError') {
+        console.warn('⚠️ [IndexedDB]: la base local es más nueva que este código. Se abre la versión existente.');
+        return this.abrir(undefined);
+      }
+      throw error;
+    });
+    return this.initPromise;
+  }
+
+  /** Abre la base con una versión concreta (o la existente si no se indica). */
+  private abrir(version?: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const request = version == null ? indexedDB.open(DB_NAME) : indexedDB.open(DB_NAME, version);
 
       // Si otra pestaña/PWA vieja mantiene la base abierta, la actualización de versión queda
       // bloqueada y `open` nunca responde: la app se quedaba en el logo para siempre.
@@ -110,65 +128,17 @@ export class IndexedDBAdapter implements DatabaseAdapter {
         resolve();
       };
 
+      request.onblocked = () => {
+        console.warn('⚠️ [IndexedDB]: la base está abierta en otra pestaña; se espera a que se cierre.');
+      };
+
       request.onerror = (event) => {
         clearTimeout(timer);
         if (terminado) return;
         terminado = true;
-        const error = (event.target as IDBOpenDBRequest).error;
-
-        // La base de este navegador está en una versión MÁS NUEVA que la de este código
-        // (ej.: se abrió antes con otra rama/publicación que subió DB_VERSION). IndexedDB no
-        // permite bajar de versión y `open(nombre, versionVieja)` falla con VersionError, lo que
-        // dejaba la app en "Error Crítico de Inicio". Una base más nueva contiene todos los
-        // almacenes que este código necesita, así que se abre tal como está, sin versión.
-        if (error?.name === 'VersionError') {
-          console.warn(`⚠️ [IndexedDB]: la base local es más nueva que la versión ${DB_VERSION} de este código; se abre la versión existente.`);
-          this.abrirVersionExistente().then(resolve, (e) => {
-            this.initPromise = null; // permite reintentar init()
-            reject(e);
-          });
-          return;
-        }
-
         this.initPromise = null; // permite reintentar init()
-        console.error('❌ [IndexedDB]: Error al abrir la DB:', error);
-        reject(error);
-      };
-    });
-    return this.initPromise;
-  }
-
-  /** Abre la base en la versión que ya tenga (sin pedir una), con el mismo límite de tiempo. */
-  private abrirVersionExistente(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME);
-      let terminado = false;
-      const timer = setTimeout(() => {
-        if (terminado) return;
-        terminado = true;
-        reject(new Error(`IndexedDB no respondió en ${INIT_TIMEOUT_MS / 1000}s (¿otra pestaña de la app abierta?)`));
-      }, INIT_TIMEOUT_MS);
-
-      request.onsuccess = (event) => {
-        clearTimeout(timer);
-        const abierta = (event.target as IDBOpenDBRequest).result;
-        if (terminado) { abierta.close(); return; }
-        terminado = true;
-        this.db = abierta;
-        abierta.onversionchange = () => {
-          abierta.close();
-          if (this.db === abierta) this.db = null;
-          this.initPromise = null;
-        };
-        resolve();
-      };
-
-      request.onerror = (event) => {
-        clearTimeout(timer);
-        if (terminado) return;
-        terminado = true;
         const error = (event.target as IDBOpenDBRequest).error;
-        console.error('❌ [IndexedDB]: Error al abrir la DB existente:', error);
+        console.error('❌ [IndexedDB]: Error al abrir la DB:', error);
         reject(error);
       };
     });

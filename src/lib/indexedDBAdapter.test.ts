@@ -75,6 +75,7 @@ describe('IndexedDBAdapter.init — bloqueo por otra pestaña', () => {
     const primera = req;
     // El navegador responde que la base ya está en una versión mayor a la pedida.
     primera.onerror({ target: { error: { name: 'VersionError' } } });
+    await vi.advanceTimersByTimeAsync(0); // deja correr el paso asíncrono que abre por segunda vez
 
     // Segunda apertura: sin número de versión.
     expect(open).toHaveBeenCalledTimes(2);
@@ -92,6 +93,7 @@ describe('IndexedDBAdapter.init — bloqueo por otra pestaña', () => {
     const p = adapter.init();
     const rechazo = expect(p).rejects.toBeTruthy();
     req.onerror({ target: { error: { name: 'VersionError' } } });
+    await vi.advanceTimersByTimeAsync(0); // deja correr el paso asíncrono que abre por segunda vez
     req.onerror({ target: { error: { name: 'UnknownError', message: 'backend roto' } } });
     await rechazo;
     adapter.init();

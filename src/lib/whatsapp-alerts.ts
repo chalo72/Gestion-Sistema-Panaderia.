@@ -1,4 +1,5 @@
 import { db } from '@/lib/database';
+import { hoyLocal } from '@/lib/fecha-local';
 
 const NAV_HINT_KEY = 'dulceplacer_nav_prepedido_hint';
 const SENT_KEY = 'dp_wa_sent_v1';
@@ -15,13 +16,13 @@ function getSentToday(): string[] {
     const raw = localStorage.getItem(SENT_KEY);
     if (!raw) return [];
     const rec: SentRecord = JSON.parse(raw);
-    const hoy = new Date().toISOString().split('T')[0];
+    const hoy = hoyLocal();
     return rec.fecha === hoy ? rec.ids : [];
   } catch { return []; }
 }
 
 function markSent(ids: string[]) {
-  const hoy = new Date().toISOString().split('T')[0];
+  const hoy = hoyLocal();
   const merged = [...new Set([...getSentToday(), ...ids])];
   localStorage.setItem(SENT_KEY, JSON.stringify({ fecha: hoy, ids: merged }));
 }

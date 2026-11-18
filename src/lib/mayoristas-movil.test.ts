@@ -38,7 +38,7 @@ describe('Mayoristas — barra del ticket en el Mini-POS (móvil)', () => {
 
 describe('Mayoristas — vista principal en celular', () => {
   it('el subtítulo del encabezado se oculta solo en móvil', () => {
-    expect(clasesDe('Precios para tiendas y vendedores')).toContain('max-md:hidden');
+    expect(clasesDe('Precios, ventas y rutas a tiendas')).toContain('max-md:hidden');
   });
 
   it('los botones del encabezado van en 2 columnas de 44px en móvil y conservan h-10 en escritorio', () => {

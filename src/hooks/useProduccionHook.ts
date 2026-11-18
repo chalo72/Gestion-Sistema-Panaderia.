@@ -139,15 +139,13 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
             // Nube con máxima prioridad de enlace
             { label: 'cloud', data: formCloud, prioridadEmpate: 10 },
           ],
-          hasRealForm ? [] : toArr(DATOS_EJEMPLO.formulaciones),
+          toArr(DATOS_EJEMPLO.formulaciones),
         ) as FormulacionBase[];
 
         const modIDB = toArr(modelosIDB);
         const modBackup = toArr(oldBackupMod);
         const modLocal = toArr(localMod);
         const modCloud = toArr(cloudMod);
-        const hasRealMod =
-          modIDB.length > 0 || modBackup.length > 0 || modLocal.length > 0 || modCloud.length > 0;
         const finalModelos = mergePorRecencia(
           [
             { label: 'local', data: modLocal, prioridadEmpate: 2 },
@@ -155,7 +153,7 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
             { label: 'idb', data: modIDB, prioridadEmpate: 4 },
             { label: 'cloud', data: modCloud, prioridadEmpate: 10 },
           ],
-          hasRealMod ? [] : toArr(DATOS_EJEMPLO.modelosPan),
+          toArr(DATOS_EJEMPLO.modelosPan),
         ) as ModeloPan[];
 
         // CAPA DE BÓVEDA INMUTABLE: Auto-reparar si falta alguna masa maestra o insumo
@@ -299,8 +297,12 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
     toast.success('Plan eliminado');
   }, []);
 
-  const finalizarProduccion = useCallback(async (id: string, cantidadCompletada: number) => {
-    const orden = produccion.find(o => o.id === id);
+  const finalizarProduccion = useCallback(async (id: string, cantidadCompletada: number, ordenOverride?: OrdenProduccion) => {
+    // ordenOverride: para cuando se crea y se completa una orden en el mismo instante
+    // (ej. el puente Libreta → Inventario) y el estado `produccion` de React todavía
+    // no se re-renderizó con la orden recién creada — buscar en `produccion` fallaría
+    // en silencio y no completaría nada.
+    const orden = ordenOverride || produccion.find(o => o.id === id);
     if (!orden || orden.estado === 'completado') return;
 
     // 1. Obtener receta o formulación
@@ -329,6 +331,7 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
     const ajustes: any[] = [];
 
     // A. Descontar ingredientes
+    let insumosDescontados = false;
     if (formulacion && modelo) {
         // LÓGICA NUEVA: Basado en arrobasUsadas y formulacion (Plan Diario)
         // Usar las arrobas planeadas que están en la orden
@@ -344,6 +347,7 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
                 usuario: usuarioActual
             });
         }
+        insumosDescontados = true;
     } else if (receta) {
         // LÓGICA ANTIGUA (Legacy): Basada en receta simple
         for (const ingrediente of receta.ingredientes) {
@@ -357,6 +361,25 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
             usuario: usuarioActual
           });
         }
+        insumosDescontados = true;
+    }
+
+    // GUARDIÁN: nunca completar en silencio sin descontar insumos.
+    // Antes, si `formulacion` existía pero `modelo` no resolvía (modelo borrado, o
+    // `modelosPan`/`formulaciones` todavía no habían cargado), la orden se marcaba
+    // "completado" y el producto terminado se acreditaba, pero ningún insumo se
+    // descontaba — sin ningún aviso.
+    if (!insumosDescontados) {
+      if (!isLoaded) {
+        toast.error('Los datos de producción (formulaciones/modelos) todavía están cargando. Espera un momento e intenta de nuevo.');
+      } else if (orden.formulacionId && !formulacion) {
+        toast.error('La formulación de esta orden ya no existe. No se completó — revisa la configuración antes de reintentar.');
+      } else if (orden.modeloPanId && !modelo) {
+        toast.error('El modelo de pan de esta orden ya no existe. No se completó — revisa la configuración antes de reintentar.');
+      } else {
+        toast.error('No se pudo determinar qué insumos descontar para esta orden. No se completó.');
+      }
+      return;
     }
 
     // B. Cargar producto terminado
@@ -384,7 +407,7 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
 
     const mermaTexto = mermaKgEstimado > 0 ? ` · merma ${modelo?.mermaEstimada}% registrada` : '';
     toast.success(`✓ ${cantidadCompletada} unidades producidas y stock actualizado${mermaTexto}.`);
-  }, [produccion, recetas, modelosPan, onAjustarStock]);
+  }, [produccion, recetas, modelosPan, formulaciones, isLoaded, onAjustarStock]);
 
   // --- Formulaciones ---
   const addFormulacion = useCallback(async (data: Omit<import('@/types').FormulacionBase, 'id'>) => {
@@ -482,6 +505,82 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
     db.deleteModeloPan(id).catch(console.error);
     toast.success('Modelo eliminado');
   }, []);
+
+  // ── Puente Libreta del Horno → Inventario (pedido de Gonzalo, 2026-10-03) ──
+  // Cada hornada que la Libreta ya guardó con un modelo de pan real (siempre
+  // elegido de la lista desplegable, nunca texto libre) y que además tiene un
+  // producto vinculado en ese modelo, crea y completa sola una Orden de
+  // Producción — así la Libreta también descuenta insumos y acredita stock
+  // real, no solo queda anotada. Si al modelo le falta el producto vinculado,
+  // esa fila se deja tal cual: no mueve inventario y NO bloquea el guardado
+  // del panadero (decisión explícita de Gonzalo, 2026-10-03).
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    const procesarLibretaHorno = async () => {
+      try {
+        const { getProducciones, saveProducciones } = await import('@/lib/finanzas-personales');
+        const registros = getProducciones();
+        let hayCambios = false;
+
+        for (const registro of registros) {
+          if (!registro.hornadas || registro.hornadas.length === 0) continue;
+          let registroCambio = false;
+          const hornadasActualizadas: typeof registro.hornadas = [];
+
+          for (const h of registro.hornadas) {
+            if (h.ordenCreada || !h.id) {
+              hornadasActualizadas.push(h);
+              continue;
+            }
+
+            const modelo = modelosPan.find(m => m.nombre === h.tipoPan);
+            const formulacion = modelo ? formulaciones.find(f => f.id === modelo.formulacionId) : null;
+            const totalPanes = Number(h.totalPanes) || 0;
+
+            if (!modelo || !modelo.productoId || !formulacion || totalPanes <= 0) {
+              hornadasActualizadas.push(h); // no resuelve a un producto real: se deja sin tocar inventario
+              continue;
+            }
+
+            try {
+              const orden = await addOrdenProduccion({
+                productoId: modelo.productoId,
+                cantidadPlaneada: totalPanes,
+                cantidadCompletada: 0,
+                usuarioId: 'libreta-horno',
+                costoEstimadoTotal: 0,
+                formulacionId: formulacion.id,
+                modeloPanId: modelo.id,
+                lote: `Libreta-${registro.fecha}`,
+              });
+              await finalizarProduccion(orden.id, totalPanes, orden);
+              hornadasActualizadas.push({ ...h, ordenCreada: true });
+              registroCambio = true;
+              hayCambios = true;
+            } catch (e) {
+              console.warn('[Libreta→Producción] No se pudo crear/completar la orden para una hornada:', e);
+              hornadasActualizadas.push(h);
+            }
+          }
+
+          if (registroCambio) {
+            registro.hornadas = hornadasActualizadas;
+          }
+        }
+
+        if (hayCambios) {
+          saveProducciones(registros);
+        }
+      } catch (e) {
+        console.warn('[Libreta→Producción] Error procesando el puente Libreta→Inventario:', e);
+      }
+    };
+
+    procesarLibretaHorno();
+    window.addEventListener('dp_producciones_changed', procesarLibretaHorno);
+    return () => window.removeEventListener('dp_producciones_changed', procesarLibretaHorno);
+  }, [isLoaded, modelosPan, formulaciones, addOrdenProduccion, finalizarProduccion]);
 
   return {
     // State

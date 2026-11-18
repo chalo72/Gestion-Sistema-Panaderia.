@@ -16,7 +16,14 @@ export default defineConfig(({ mode }) => {
     build: {
       target: 'esnext',
       outDir: 'dist',
-      sourcemap: true,
+      // 2026-10-04 (autorizado por Gonzalo): en false para NO publicar el codigo
+      // fuente. Con true, dist/assets pesaba 51 MB de los cuales 42 MB eran
+      // archivos .map con todo el codigo legible (Videovigilancia solo: 15 MB).
+      // No afecta la velocidad del usuario (los .map solo se bajan al abrir las
+      // herramientas de desarrollador), pero cualquiera podia leer la logica de
+      // precios, permisos y sincronizacion. Para depurar en local: 'npm run dev'
+      // genera sourcemaps igual, esto solo aplica al build de produccion.
+      sourcemap: false,
       chunkSizeWarningLimit: 600,
       rollupOptions: {
         output: {
@@ -99,6 +106,15 @@ export default defineConfig(({ mode }) => {
           orientation: 'portrait',
           start_url: '/',
           scope: '/',
+          shortcuts: [
+            {
+              name: 'Acceso vendedoras',
+              short_name: 'Vendedoras',
+              description: 'Entrar directo al perfil de venta',
+              url: '/?acceso=vendedoras',
+              icons: [{ src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' }]
+            }
+          ],
           icons: [
             {
               src: 'pwa-192x192.png',
