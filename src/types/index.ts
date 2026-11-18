@@ -23,6 +23,8 @@ export interface Producto {
   descuentoMayorista?: number; // Descuento porcentual específico para venta mayorista
   comisionRepartidor?: number; // % del precio mayorista que gana el repartidor
   unidadesPaquete?: number;    // Pan de empaque: unidades que trae cada paquete
+  /** Precio de venta del paquete completo en el Punto de Venta (2026-11-18). Vacío = solo por unidad. */
+  precioVentaPaquete?: number;
 }
 
 export interface IngredienteReceta {
@@ -1000,6 +1002,9 @@ export interface VentaItem {
   cantidad: number;
   precioUnitario: number;
   subtotal: number;
+  /** Venta por paquete: unidades de inventario que descuenta cada ítem (ej. 24). */
+  unidadesPorItem?: number;
+  nombre?: string;
 }
 
 export interface Venta {

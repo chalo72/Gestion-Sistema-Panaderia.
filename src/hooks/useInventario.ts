@@ -5,6 +5,7 @@ import { generateUUID } from '@/lib/safe-utils';
  */
 import { useState, useCallback, useEffect } from 'react';
 import { db } from '@/lib/database';
+import { unidadesQueEntran } from '@/lib/venta-paquete';
 import type { 
   InventarioItem, 
   MovimientoInventario, 
@@ -116,9 +117,11 @@ export function useInventario({ productos }: UseInventarioParams) {
     // 2. Ajustar Stock para cada item
     for (const item of recepcion.items) {
       if (item.cantidadRecibida > 0) {
+        // Inventario en UNIDADES: 2 pacas de 48 → 96 (solo productos con "trae 48" guardado, 2026-11-18)
+        const prod = productos.find(p => p.id === item.productoId);
         await onAjustarStock(
           item.productoId,
-          item.cantidadRecibida,
+          unidadesQueEntran(item.cantidadRecibida, prod),
           'entrada',
           `Recepción: ${recepcion.numeroFactura}`
         );
@@ -131,7 +134,7 @@ export function useInventario({ productos }: UseInventarioParams) {
     }
 
     toast.success('Insumos cargados al inventario con éxito');
-  }, [onAjustarStock]);
+  }, [onAjustarStock, productos]);
 
   const updateRecepcion = useCallback(async (id: string, updates: Partial<Recepcion>) => {
     const recepcion = recepciones.find(r => r.id === id);

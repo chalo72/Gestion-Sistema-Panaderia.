@@ -41,7 +41,8 @@ import { ymdLocal, hoyLocal } from '@/lib/fecha-local';
 import { cuadreFactura } from '@/lib/cuadre-factura';
 import { MarcaPrecioModificado } from '@/components/precios/MarcaPrecioModificado';
 import { precioParaRecepcion, describirEmpaque } from '@/lib/precio-recepcion';
-import { empaqueDesdeFormulario, precioProveedorDesdeEmpaque } from '@/lib/empaque-producto';
+import { empaqueDesdeFormulario, precioProveedorDesdeEmpaque, numeroFormulario } from '@/lib/empaque-producto';
+import { unidadesQueEntran } from '@/lib/venta-paquete';
 import { ultimoCambioPrecio, useCambiosPrecio } from '@/lib/cambio-precio-catalogo';
 
 /** "139.990" y "169.980" son pesos colombianos, no decimales. */
@@ -366,7 +367,7 @@ export default function Recepciones({
         tipo: 'elaborado' as 'elaborado' | 'ingrediente', unidadMedida: '',
         useHeladeriaCalc: false, costoCaja: '', unidadesPorCaja: '', costoInsumoExtra: '',
         stockActual: '', stockMinimo: '5', descuentoMayorista: '',
-        tipoEmbalaje: 'unidad', unidadesPaquete: '1', precioPaquete: ''
+        tipoEmbalaje: 'unidad', unidadesPaquete: '1', precioPaquete: '', precioVentaPaquete: ''
     };
     const [formDataModal, setFormDataModal] = useState(FORM_DATA_VACIO);
 
@@ -495,6 +496,7 @@ export default function Recepciones({
             precioVenta,
             costoBase: costo,
             unidadesPaquete: empaque.unidades,
+            precioVentaPaquete: empaque.porPaquete && numeroFormulario((formDataModal as any).precioVentaPaquete) > 0 ? numeroFormulario((formDataModal as any).precioVentaPaquete) : undefined,
             imagen: formDataModal.imagen,
             tipo: formDataModal.tipo || 'elaborado',
             unidadMedida: formDataModal.unidadMedida || 'unidad',
@@ -1387,7 +1389,8 @@ export default function Recepciones({
                 await guardarFacturaEnArchivo(recepcionCompleta, newRecepcion.imagenFactura);
             }
 
-            const totalUnidadesSaved = newRecepcion.items.reduce((sum, i) => sum + i.cantidadRecibida, 0);
+            // Unidades reales al inventario: 2 pacas de 48 = 96 (2026-11-18)
+            const totalUnidadesSaved = newRecepcion.items.reduce((sum, i) => sum + unidadesQueEntran(i.cantidadRecibida, getProductoById(i.productoId)), 0);
             toast.success(
                 <div className="flex flex-col gap-1">
                     <span className="font-semibold flex items-center gap-2">
@@ -2013,6 +2016,11 @@ export default function Recepciones({
                                                         <button onClick={() => handleUpdateItem(item.id, { cantidadRecibida: item.cantidadRecibida + 1 })}
                                                             className="w-7 h-8 flex items-center justify-center text-slate-300 hover:bg-white/10 font-black text-base transition-colors">+</button>
                                                     </div>
+                                                    {(getProductoById(item.productoId)?.unidadesPaquete ?? 0) > 1 && item.cantidadRecibida > 0 && (
+                                                        <span className="text-[11px] font-bold text-emerald-300 whitespace-nowrap" title="Unidades que entran al inventario">
+                                                            = {unidadesQueEntran(item.cantidadRecibida, getProductoById(item.productoId))} und
+                                                        </span>
+                                                    )}
                                                     <button onClick={() => handleUpdateItem(item.id, { productoOk: !item.productoOk })} title="Estado producto"
                                                         className={cn("w-8 h-8 rounded-lg flex items-center justify-center transition-all shrink-0",
                                                             item.productoOk ? "bg-emerald-600/30 text-emerald-400" : "bg-rose-600/30 text-rose-400"

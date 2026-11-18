@@ -17,6 +17,7 @@ import type {
 import { toast } from 'sonner';
 import { procesarCuadreTurno, vigilarMovimientoCaja } from '@/lib/security-agent';
 import { upsertCajaEnVentaDiaria } from '@/lib/finanzas-personales';
+import { idBase, unidadesQueDescuenta } from '@/lib/venta-paquete';
 import { hoyLocalYMD } from '@/lib/fecha-local';
 
 const _supaDB = new SupabaseDatabase();
@@ -331,9 +332,10 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
     for (const item of venta.items) {
       // Líneas de servicio (ej. cobro de pedido de torta) no son productos del inventario
       if (String(item.productoId).startsWith('servicio:')) continue;
+      // Venta por paquete: descuenta las unidades del paquete del producto real (2026-11-18)
       await onAjustarStock(
-        item.productoId,
-        item.cantidad,
+        idBase(item.productoId),
+        unidadesQueDescuenta(item),
         'salida',
         `Venta: ${venta.id.slice(0, 8)}`
       );

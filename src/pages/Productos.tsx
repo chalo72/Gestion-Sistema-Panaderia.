@@ -23,7 +23,7 @@ import { ProductPriceItem } from '@/components/productos/ProductPriceItem';
 import { IceCreamAssistantModal } from '@/components/productos/IceCreamAssistantModal';
 import { BeverageAssistantModal } from '@/components/productos/BeverageAssistantModal';
 import { db } from '@/lib/database';
-import { empaqueDesdeFormulario, precioProveedorDesdeEmpaque, camposEmpaqueParaEditar } from '@/lib/empaque-producto';
+import { empaqueDesdeFormulario, precioProveedorDesdeEmpaque, camposEmpaqueParaEditar, numeroFormulario } from '@/lib/empaque-producto';
 
 interface ProductosProps {
     productos: Producto[];
@@ -96,7 +96,7 @@ export default function Productos({
         // [Nexus-Volt] Stock Fields
         stockActual: '', stockMinimo: '5', descuentoMayorista: '',
         // Compra por paquete (paca x24 → costo por unidad)
-        tipoEmbalaje: 'unidad', unidadesPaquete: '1', precioPaquete: ''
+        tipoEmbalaje: 'unidad', unidadesPaquete: '1', precioPaquete: '', precioVentaPaquete: ''
     });
     const [nuevaCategoria, setNuevaCategoria] = useState({ nombre: '', color: COLORES_PRESET[0], tipo: 'venta' as 'venta' | 'insumo' });
 
@@ -161,6 +161,7 @@ export default function Productos({
             unidadMedida: formData.unidadMedida || 'unidad', 
             costoBase: costo,
             unidadesPaquete: empaque.unidades,
+            precioVentaPaquete: empaqueDesdeFormulario(formData).porPaquete && numeroFormulario(formData.precioVentaPaquete) > 0 ? numeroFormulario(formData.precioVentaPaquete) : null,
             stockActual: stockActualNum,
             stockMinimo: stockMinimoNum,
             descuentoMayorista: formData.descuentoMayorista === '' ? undefined : parseFloat(String(formData.descuentoMayorista).replace(',', '.')) || 0
@@ -202,7 +203,7 @@ export default function Productos({
             proveedorId: '', precioCosto: '', notasPrecio: '', imagen: '', tipo: 'elaborado', unidadMedida: '',
             useHeladeriaCalc: false, costoCaja: '', unidadesPorCaja: '', costoInsumoExtra: '',
             stockActual: '', stockMinimo: '5', descuentoMayorista: '',
-            tipoEmbalaje: 'unidad', unidadesPaquete: '1', precioPaquete: ''
+            tipoEmbalaje: 'unidad', unidadesPaquete: '1', precioPaquete: '', precioVentaPaquete: ''
         });
         setEditingProducto(null);
     };
@@ -233,6 +234,7 @@ export default function Productos({
                 // Si el proveedor lo vende por paca, se muestra la paca aparte y el costo por unidad
                 // (antes la paca de $12.300 quedaba como costo de UNA unidad).
                 ...camposEmpaqueParaEditar(mp, producto),
+                precioVentaPaquete: producto.precioVentaPaquete ? String(producto.precioVentaPaquete) : '',
                 notasPrecio: mp?.notas || '',
                 tipo: producto.tipo || 'elaborado',
                 unidadMedida: (producto as any).unidadMedida || '',

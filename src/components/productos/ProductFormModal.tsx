@@ -608,12 +608,13 @@ export function ProductFormModal({
                         )}
                     </div>
 
-                    {/* ── PRECIO DE VENTA Y MARGEN (solo Para Venta) ── */}
-                    {tipoActual === 'elaborado' && (
+                    {/* ── PRECIO DE VENTA Y MARGEN (también insumos que se venden, 2026-11-18) ── */}
+                    {(
+
                         <div className="p-5 rounded-xl bg-orange-50/60 dark:bg-orange-900/10 border border-orange-200 dark:border-orange-800/40 space-y-4">
                             <div className="flex items-center gap-2">
                                 <TrendingUp className="w-4 h-4 text-orange-500" />
-                                <span className="text-xs font-black uppercase tracking-widest text-orange-600 dark:text-orange-400">Precio de Venta y Margen</span>
+                                <span className="text-xs font-black uppercase tracking-widest text-orange-600 dark:text-orange-400">{tipoActual === 'elaborado' ? 'Precio de Venta y Margen' : 'Precio de venta (si también lo vendes en el Punto de Venta)'}</span>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
@@ -673,6 +674,22 @@ export function ProductFormModal({
                                     </div>
                                 </div>
                             </div>
+                            {empaque.porPaquete && (
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="precio-venta-paquete" className="text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wide">
+                                        Vender también la {formData.tipoEmbalaje} completa (x{empaque.unidades}) — opcional
+                                    </Label>
+                                    <div className="relative">
+                                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-orange-400" />
+                                        <Input id="precio-venta-paquete" type="text" inputMode="numeric"
+                                            value={formData.precioVentaPaquete ?? ''}
+                                            onChange={e => setFormData({ ...formData, precioVentaPaquete: e.target.value.replace(/[^\d]/g, '') })}
+                                            className="h-11 pl-9 text-base font-bold rounded-xl border-orange-200 dark:border-orange-800/40 bg-white dark:bg-slate-900"
+                                            placeholder={margen > 0 ? `Sugerido ${precioVentaConMargen(empaque.precioPaquete, margen)}` : 'Vacío = solo por unidad'} />
+                                    </div>
+                                    <p className="text-xs text-slate-600 dark:text-slate-300">Si lo llenas, en el Punto de Venta sale también "{formData.nombre || 'el producto'} (paquete x{empaque.unidades})" y al venderlo se descuentan {empaque.unidades} unidades del inventario.</p>
+                                </div>
+                            )}
                             
                             <div className="grid grid-cols-2 gap-4">
                                 {/* Descuento Mayorista */}
@@ -843,7 +860,7 @@ export function ProductFormModal({
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {/* Stock Actual */}
                             <div className="space-y-1.5">
-                                <Label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Stock Actual</Label>
+                                <Label className="text-sm font-semibold text-slate-700 dark:text-slate-300">{empaque.porPaquete ? `Stock actual EN UNIDADES (1 ${formData.tipoEmbalaje} = ${empaque.unidades})` : 'Stock Actual'}</Label>
                                 <div className="relative">
                                     <Package className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                     <Input

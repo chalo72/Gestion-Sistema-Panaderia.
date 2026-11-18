@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import type { Producto, InventarioItem, Categoria } from '@/types';
 import { safeNumber } from '@/lib/safe-utils';
 import { toast } from 'sonner';
+import { esIdPaquete, idBase } from '@/lib/venta-paquete';
 import { ProductAvatar, CategoriaAvatar } from '@/components/ui/ProductAvatar';
 
 interface ProductCatalogProps {
@@ -104,8 +105,13 @@ export function ProductCatalog({
 
     const isSearching = searchTerm.trim().length > 0;
 
-    const openEditModal = (producto: Producto, e: React.MouseEvent) => {
+    const openEditModal = (productoTocado: Producto, e: React.MouseEvent) => {
         e.stopPropagation();
+        // La tarjeta del paquete es virtual: se edita el producto real (2026-11-18)
+        const producto = esIdPaquete(productoTocado.id)
+            ? (productos.find(p => p.id === idBase(productoTocado.id)) ?? productoTocado)
+            : productoTocado;
+        if (esIdPaquete(producto.id)) return;
         setEditingProduct(producto);
         const itemInv = inventario.find(i => i.productoId === producto.id);
         setEditForm({
