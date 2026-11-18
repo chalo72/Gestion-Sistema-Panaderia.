@@ -475,8 +475,16 @@ export function useRealtimeSync() {
       }));
     }));
 
+    // Borrados registrados en la nube (por cualquier aparato). Antes solo se miraban los de
+    // ESTE aparato: uno que estaba apagado cuando se borró algo lo volvía a subir (2026-11-18).
+    let tumbasNubeInicio: Set<string> | null = null;
+    try {
+      const { data, error } = await supabase.from('tombstones').select('table, item_id');
+      if (!error) tumbasNubeInicio = new Set((data ?? []).map((r: any) => `${r.table}:${r.item_id}`));
+    } catch { /* sin lista de borrados: se sigue como antes */ }
+
     // 3) SUBIR solo lo que falta en la nube o cambió aquí
-    const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const UUID =/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const pushTasks: [string, () => Promise<any[]>, (d: any) => Promise<void>][] = [
       ['productos', async () => (await db.getAllProductos()).filter((i: any) => i.id && UUID.test(i.id)),
         (d) => supabaseDB.addProducto(d)],
@@ -526,6 +534,27 @@ export function useRealtimeSync() {
       }
       const tombSet = new Set(tumbas);
       const mapaRemoto = new Map((remotos.get(tableName) ?? []).map((r: any) => [r.id, r]));
+      // Borrado en otro aparato: ya no está en la nube Y hay lápida en la nube → no se resube,
+      // se quita también aquí. Si sigue en la nube (alguien lo restauró) no se toca.
+      const tablaLocal = HANDLERS[tableName]?.localTableName ?? tableName;
+      // Solo tablas que sí se borran (proveedores, productos, precios…); ventas, cajas,
+      // inventario, nómina, etc. nunca se tocan aquí.
+      const seBorra = !!HANDLERS[tableName] && HANDLERS[tableName].deleteFromLocal !== noBorrar;
+      const borradosFuera = tumbasNubeInicio && seBorra
+        ? itemsLocales.filter((local: any) =>
+            local?.id && !tombSet.has(local.id) && !mapaRemoto.has(local.id)
+            && tumbasNubeInicio!.has(`${tablaLocal}:${local.id}`))
+        : [];
+      for (const b of borradosFuera) {
+        tombSet.add(b.id);
+        await HANDLERS[tableName]?.deleteFromLocal(b.id).catch(() => {});
+        await db.addTombstone(tablaLocal, b.id).catch(() => {});
+      }
+      if (borradosFuera.length > 0) {
+        window.dispatchEvent(new CustomEvent('nexus-realtime-change', {
+          detail: { table: tableName, eventType: 'DELETE', id: borradosFuera[0].id },
+        }));
+      }
       const aSubir = itemsLocales.filter((local: any) =>
         local?.id && !tombSet.has(local.id) && hayQueSubir(local, mapaRemoto.get(local.id), tableName),
       );
