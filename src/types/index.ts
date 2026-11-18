@@ -1218,6 +1218,8 @@ export interface PagoCredito {
   nota?: string;
   /** false = esta quincena se decidió no cobrar la cuota. */
   cobrada?: boolean;
+  /** Pospuesto: primer día (YYYY-MM-DD) de la quincena en la que sí se cobra (2026-11-18). */
+  posponerHasta?: string;
 }
 
 // ============================================================
@@ -1282,6 +1284,8 @@ export interface CreditoTrabajador {
   items: ItemCredito[];       // Productos tomados
   fotoEvidencia?: string;     // base64 — foto de evidencia obligatoria
   tieneFoto?: boolean;        // la nube tiene foto pero la lista no la descargó (se trae al tocarla)
+  /** Quién lo anotó/cambió, aparato, fecha y hora, cobros y posposiciones (2026-11-18) */
+  historial?: { id: string; fecha: string; accion: string; usuario: string; aparato: string; detalle: string }[];
   descontarDeSalario: boolean;// Si se descuenta del próximo pago
   /** Cuota que se propone descontar cada quincena. El saldo no se cobra de un solo golpe. */
   cuota?: number;

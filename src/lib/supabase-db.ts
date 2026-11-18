@@ -981,7 +981,7 @@ export class SupabaseDatabase implements IDatabase {
     // en cada sincronización. La foto se trae solo al tocarla (foto-credito-nube.ts).
     static readonly COLUMNAS_CREDITO_TRABAJADOR =
         'id, trabajador_id, trabajador_nombre, trabajador_rol, monto, saldo, tipo, descripcion, fecha, ' +
-        'fecha_vencimiento, estado, items, pagos, descontar_de_salario, usuario_id, created_at, updated_at, tiene_foto';
+        'fecha_vencimiento, estado, items, pagos, descontar_de_salario, usuario_id, created_at, updated_at, tiene_foto, historial';
 
     async getAllCreditosTrabajadores(): Promise<any[]> {
         const { data, error } = await supabase.from('creditos_trabajadores').select(SupabaseDatabase.COLUMNAS_CREDITO_TRABAJADOR);
@@ -1008,6 +1008,8 @@ export class SupabaseDatabase implements IDatabase {
                 pagos: Array.isArray(c.pagos) ? c.pagos : [],
                 ...(c.foto_evidencia ? { fotoEvidencia: c.foto_evidencia } : {}),
                 ...(c.tiene_foto !== undefined ? { tieneFoto: c.tiene_foto === true } : {}),
+                // Historial: quién lo anotó/cambió, aparato, fecha y hora (2026-11-18, AUTORIZO Gonzalo)
+                ...(Array.isArray(c.historial) ? { historial: c.historial } : {}),
                 descontarDeSalario: c.descontar_de_salario !== false,
                 usuarioId: c.usuario_id ?? undefined,
                 ...(c.created_at ? { createdAt: new Date(c.created_at).toISOString() } : {}),
@@ -1032,6 +1034,8 @@ export class SupabaseDatabase implements IDatabase {
             // La foto solo se manda si este aparato la tiene: la lista ya no la descarga y
             // mandar null borraría en la nube la foto subida desde otro aparato.
             ...(c.fotoEvidencia ? { foto_evidencia: c.fotoEvidencia } : {}),
+            // Solo si este aparato tiene historial: no borrar el que subió otro aparato
+            ...(Array.isArray(c.historial) && c.historial.length > 0 ? { historial: c.historial } : {}),
             descontar_de_salario: c.descontarDeSalario !== false,
             usuario_id: c.usuarioId ?? null,
             created_at: c.createdAt ?? c.fecha ?? new Date().toISOString(),
