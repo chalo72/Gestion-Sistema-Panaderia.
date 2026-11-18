@@ -11,6 +11,7 @@ import HorarioSiEnferma from '@/components/nomina/HorarioSiEnferma';
 import { EVENTO_HORARIO, leerAncla, leerCambios, leerEnlace, mapaNotasPeriodo, type NotaDiaNomina } from '@/lib/horario-tienda';
 import { puedeEditarHorario } from '@/lib/view-guards';
 import { ymdLocal } from '@/lib/fecha-local';
+import { diasDobleTurnoDe } from '@/lib/asistencia-lista';
 import { useCan } from '@/contexts/AuthContext';
 import { db } from '@/lib/database';
 import { getBovedas, addMovimientoBoveda } from '@/lib/boveda-store';
@@ -586,6 +587,13 @@ export default function Nomina({
 
   const rango       = useMemo(() => rangoQuincena(periodo, mes, año), [periodo, mes, año]);
   const diasPeriodo = useMemo(() => diasEnRango(rango.inicio, rango.fin), [rango]);
+  // Doble turno automático (2026-11-18): días en que marcó "Llegué" en la mañana y otra vez
+  // desde las 2:00 p. m. Si Gonzalo ya tocó los dobles de esa trabajadora, mandan los suyos.
+  const doblesDe = useCallback(
+    (trabajadorId: string): string[] =>
+      diasDoble[trabajadorId] ?? diasDobleTurnoDe(asistencia, trabajadorId, diasPeriodo),
+    [diasDoble, asistencia, diasPeriodo],
+  );
   const esActual    = periodo === hoy.periodo && mes === hoy.mes && año === hoy.año;
 
   const nominaExistente = useMemo(() =>
@@ -672,7 +680,7 @@ export default function Nomina({
       const montoDiasMenos = Math.round(diasMenosAplicados * valorDia);
       const montoDiasExtra = Math.round(diasExtraAplicados * valorDia);
       // Doble turno: solo cuentan los días de esta quincena en que sí vino
-      const dobles = (diasDoble[t.id] ?? []).filter(f => an.dias.some(d => d.fecha === f && d.vino)).sort();
+      const dobles = doblesDe(t.id).filter(f => an.dias.some(d => d.fecha === f && d.vino)).sort();
       const vDoble = Math.max(0, valorDoble[t.id] || valorDia);
       const montoDoble = Math.round(dobles.length * vDoble);
       const valorBruto = Math.max(0, valorBrutoCalculado - montoDiasMenos + montoDiasExtra + montoDoble + (ajustes[t.id] ?? 0));
@@ -716,7 +724,7 @@ export default function Nomina({
         _diasFaltados: diasFaltados,
       };
     });
-  }, [trabajadoresActivos, asistenciaMap, creditosTrabajadores, diasPeriodo, rango.fin, ajustes, cobroExtra, diasMenos, diasExtra, diasDoble, valorDoble, valorDiaEdit, diasVino, horasHabituales, hoyLocal, parciales, modoCalculo, notasPeriodo]);
+  }, [trabajadoresActivos, asistenciaMap, creditosTrabajadores, diasPeriodo, rango.fin, ajustes, cobroExtra, diasMenos, diasExtra, diasDoble, doblesDe, valorDoble, valorDiaEdit, diasVino, horasHabituales, hoyLocal, parciales, modoCalculo, notasPeriodo]);
 
   // Cada trabajadora se paga por separado: las ya pagadas quedan "congeladas" tal como se guardaron;
   // las demás siguen calculándose en vivo.
@@ -1859,7 +1867,7 @@ export default function Nomina({
                         return { ...prev, [trabajadora.id]: a.includes(fecha) ? a.filter(f => f !== fecha) : [...a, fecha] };
                       });
                       const modoDoble = marcandoDoble === trabajadora.id;
-                      const doblesTrab = diasDoble[trabajadora.id] ?? [];
+                      const doblesTrab = doblesDe(trabajadora.id);
                       // En modo doble turno: tocar el día lo marca/desmarca como doble. Si no tenía asistencia, también queda "sí vino".
                       const alternarDoble = (d: DiaInfo) => {
                         const ya = doblesTrab.includes(d.fecha);

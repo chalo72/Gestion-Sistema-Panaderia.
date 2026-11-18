@@ -62,3 +62,54 @@ export const horaLocalDeRegistro = (r: Pick<RegistroAsistencia, 'hora' | 'create
   }
   return r.hora || '';
 };
+
+// ── Doble turno automático (2026-11-18, decidido por Gonzalo) ──
+// Cuenta como doble turno el día en que la trabajadora marcó "Llegué" en la mañana
+// Y otra vez desde las 2:00 p. m. (turno de la tarde). Una salida y vuelta dentro de la
+// misma mañana (almuerzo) NO cuenta doble.
+
+/** Hora (en horas, hora del aparato) desde la que empieza el turno de la tarde. */
+export const HORA_INICIO_TARDE = 14;
+
+/** Hora decimal local de un registro (7.5 = 7:30). Usa createdAt; si no, el texto "HH:mm". */
+export const horaDecimal = (r: Pick<RegistroAsistencia, 'hora' | 'createdAt'> | undefined): number | null => {
+  if (!r) return null;
+  const d = r.createdAt ? new Date(r.createdAt) : null;
+  if (d && Number.isFinite(d.getTime())) return d.getHours() + d.getMinutes() / 60;
+  const m = /^(\d{1,2}):(\d{2})/.exec(String(r.hora || ''));
+  return m ? Number(m[1]) + Number(m[2]) / 60 : null;
+};
+
+export const esDeLaTarde = (r: Pick<RegistroAsistencia, 'hora' | 'createdAt'>): boolean => {
+  const h = horaDecimal(r);
+  return h !== null && h >= HORA_INICIO_TARDE;
+};
+
+/** Llegadas del día separadas en mañana y tarde. */
+export const llegadasDelDia = (registros: RegistroAsistencia[], trabajadorId: string, fecha: string) => {
+  const entradas = registros.filter(r => r.trabajadorId === trabajadorId && r.fecha === fecha && r.tipo === 'entrada');
+  return {
+    manana: entradas.filter(r => !esDeLaTarde(r)),
+    tarde: entradas.filter(r => esDeLaTarde(r)),
+  };
+};
+
+export const esDobleTurno = (registros: RegistroAsistencia[], trabajadorId: string, fecha: string): boolean => {
+  const { manana, tarde } = llegadasDelDia(registros, trabajadorId, fecha);
+  return manana.length > 0 && tarde.length > 0;
+};
+
+/** Días (YYYY-MM-DD) del listado en que hizo doble turno, ordenados. */
+export const diasDobleTurnoDe = (registros: RegistroAsistencia[], trabajadorId: string, fechas: string[]): string[] =>
+  fechas.filter(f => esDobleTurno(registros, trabajadorId, f)).sort();
+
+/**
+ * ¿Puede marcar ahora el turno de la tarde? Llegó en la mañana, ya son las 2:00 p. m.
+ * o más, y todavía no marcó la tarde.
+ */
+export const puedeMarcarTarde = (
+  registros: RegistroAsistencia[], trabajadorId: string, fecha: string, ahora: Date = new Date(),
+): boolean => {
+  const { manana, tarde } = llegadasDelDia(registros, trabajadorId, fecha);
+  return manana.length > 0 && tarde.length === 0 && ahora.getHours() + ahora.getMinutes() / 60 >= HORA_INICIO_TARDE;
+};
