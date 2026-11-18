@@ -41,6 +41,7 @@ import { ymdLocal, hoyLocal } from '@/lib/fecha-local';
 import { cuadreFactura } from '@/lib/cuadre-factura';
 import { MarcaPrecioModificado } from '@/components/precios/MarcaPrecioModificado';
 import { precioParaRecepcion, describirEmpaque } from '@/lib/precio-recepcion';
+import { empaqueDesdeFormulario, precioProveedorDesdeEmpaque } from '@/lib/empaque-producto';
 import { ultimoCambioPrecio, useCambiosPrecio } from '@/lib/cambio-precio-catalogo';
 
 /** "139.990" y "169.980" son pesos colombianos, no decimales. */
@@ -364,7 +365,8 @@ export default function Recepciones({
         margenUtilidad: '30', proveedorId: '', precioCosto: '', notasPrecio: '', imagen: '',
         tipo: 'elaborado' as 'elaborado' | 'ingrediente', unidadMedida: '',
         useHeladeriaCalc: false, costoCaja: '', unidadesPorCaja: '', costoInsumoExtra: '',
-        stockActual: '', stockMinimo: '5', descuentoMayorista: ''
+        stockActual: '', stockMinimo: '5', descuentoMayorista: '',
+        tipoEmbalaje: 'unidad', unidadesPaquete: '1', precioPaquete: ''
     };
     const [formDataModal, setFormDataModal] = useState(FORM_DATA_VACIO);
 
@@ -482,13 +484,17 @@ export default function Recepciones({
             return;
         }
         const precioVenta = parseFloat(formDataModal.precioVenta) || 0;
-        const costo = parseFloat(formDataModal.precioCosto) || 0;
+        // Compra por paquete: producto con costo por UNIDAD, proveedor con la paca (2026-11-18)
+        const empaque = empaqueDesdeFormulario(formDataModal);
+        const costo = empaque.porPaquete ? empaque.costoUnidad : (parseFloat(formDataModal.precioCosto) || 0);
+        const precioProv = precioProveedorDesdeEmpaque({ ...empaque, costoUnidad: costo });
         const productoData = {
             nombre: formDataModal.nombre,
             categoria: formDataModal.categoria,
             descripcion: formDataModal.descripcion,
             precioVenta,
             costoBase: costo,
+            unidadesPaquete: empaque.unidades,
             imagen: formDataModal.imagen,
             tipo: formDataModal.tipo || 'elaborado',
             unidadMedida: formDataModal.unidadMedida || 'unidad',
@@ -519,18 +525,17 @@ export default function Recepciones({
                 }
                 if (!productoCreado) throw new Error('No se encontró el producto guardado');
 
-                handleAddItem(productoCreado.id, productoCreado);
                 if (falloSecundario) {
                     toast.message('El producto se guardó. Revisa su inventario al terminar la recepción.');
                 }
 
                 const proveedorId = formDataModal.proveedorId || newRecepcion.proveedorId;
-                if (onAddOrUpdatePrecio && proveedorId && costo > 0) {
+                if (onAddOrUpdatePrecio && proveedorId && precioProv.precioCosto > 0) {
                     try {
                         await onAddOrUpdatePrecio({
                             productoId: productoCreado.id,
                             proveedorId,
-                            precioCosto: Math.round(costo * 100) / 100,
+                            ...precioProv,
                             destino: productoCreado.tipo === 'ingrediente' ? 'insumo' : 'venta',
                         });
                         toast.success(`Producto guardado en el catálogo de ${getProveedorById(proveedorId)?.nombre || 'este proveedor'}`);
@@ -540,6 +545,9 @@ export default function Recepciones({
                 } else if (!proveedorId) {
                     toast.message('Producto creado y añadido a la recepción. Selecciona un proveedor para enlazar su catálogo.');
                 }
+                // Se agrega a la recepción DESPUÉS de guardar el precio del proveedor y con el precio
+                // del paquete (antes entraba al costo por unidad porque el precio aún no existía).
+                handleAddItem(productoCreado.id, productoCreado, precioProv.precioCosto > 0 ? precioProv.precioCosto : undefined);
             }
             setIsProductModalOpen(false);
             setProductToEdit(null);
@@ -1004,15 +1012,18 @@ export default function Recepciones({
     };
 
     // Agregar Item a la recepción
-    const handleAddItem = (productoId: string, productoDirecto?: Producto) => {
+    const handleAddItem = (productoId: string, productoDirecto?: Producto, precioDirecto?: number) => {
         const producto = productoDirecto || getProductoById(productoId);
         if (!producto) return;
         // Precio: el del proveedor escogido → si no lo tiene, la paca de otro proveedor →
         // solo al final el costo por unidad. Antes saltaba directo al costo por unidad y el
         // agua Pool salía a $700 (una botella) en vez de la paca (2026-11-18).
         const sugerido = precioParaRecepcion(precios, productoId, newRecepcion.proveedorId, producto.costoBase);
-        const precioBase = sugerido.precio;
-        if (sugerido.fuente === 'otro-proveedor' && sugerido.referencia) {
+        // Precio directo: producto recién creado con su paca (aún no está en la lista de precios)
+        const precioBase = precioDirecto && precioDirecto > 0 ? precioDirecto : sugerido.precio;
+        if (precioDirecto && precioDirecto > 0) {
+            // sin avisos: el precio lo acaba de escribir quien creó el producto
+        } else if (sugerido.fuente === 'otro-proveedor' && sugerido.referencia) {
             const deQuien = getProveedorById(sugerido.referencia.proveedorId)?.nombre || 'otro proveedor';
             const empaque = describirEmpaque(sugerido.referencia);
             toast.warning(
