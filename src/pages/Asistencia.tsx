@@ -6,7 +6,26 @@ import type { Trabajador, RegistroAsistencia } from '@/types';
 import { ymdLocal, hoyLocal } from '@/lib/fecha-local';
 import { db } from '@/lib/database';
 import { SupabaseDatabase } from '@/lib/supabase-db';
-import { trabajadorasActivas, unirAsistencia } from '@/lib/asistencia-lista';
+import { supabase } from '@/lib/supabase';
+import { trabajadorasActivas, unirAsistencia, estadoDelDia, horaLocalDeRegistro } from '@/lib/asistencia-lista';
+
+/** Cada cuánto se revisa la nube por llegadas marcadas en otros aparatos. */
+const REVISAR_NUBE_MS = 45000;
+
+/** Llegadas/salidas de HOY en la nube (consulta pequeña: solo el día). */
+const asistenciaDeHoyEnNube = async (hoy: string): Promise<RegistroAsistencia[]> => {
+  const { data, error } = await supabase.from('asistencias').select('*').eq('fecha', hoy);
+  if (error) throw error;
+  return (data ?? []).map((a: any) => ({
+    id: a.id,
+    trabajadorId: a.usuario_id,
+    trabajadorNombre: a.usuario_nombre,
+    tipo: a.tipo,
+    fecha: a.fecha,
+    createdAt: a.timestamp ? new Date(a.timestamp).toISOString() : '',
+    hora: horaLocalDeRegistro({ hora: '', createdAt: a.timestamp }),
+  })) as RegistroAsistencia[];
+};
 
 /** No esperar más de esto a la nube: mejor mostrar lo que hay que dejar la pantalla colgada. */
 const ESPERA_NUBE_MS = 8000;
@@ -100,12 +119,43 @@ export default function Asistencia({ trabajadores: trabajadoresProp, asistencia:
     return () => { vivo = false; };
   }, []);
 
+  // Llegadas marcadas en OTROS aparatos (2026-11-17): antes el aviso en vivo llegaba como
+  // 'asistencias' y la app escuchaba 'asistencia' → el otro celular nunca se enteraba.
+  const [asistenciaNube, setAsistenciaNube] = useState<RegistroAsistencia[]>([]);
+  useEffect(() => {
+    let vivo = true;
+    const releerLocal = () => db.getAllAsistencia()
+      .then(as => { if (vivo) setAsistenciaPropia(as as RegistroAsistencia[]); })
+      .catch(() => {});
+    const revisarNube = () => conLimite(asistenciaDeHoyEnNube(hoyLocal()), ESPERA_NUBE_MS)
+      .then(lista => { if (vivo) setAsistenciaNube(lista); })
+      .catch(() => { /* sin internet: se queda con lo de este aparato */ });
+    revisarNube();
+    const intervalo = setInterval(revisarNube, REVISAR_NUBE_MS);
+    const alCambiar = (e: Event) => {
+      const tabla = (e as CustomEvent<{ table?: string }>).detail?.table;
+      if (tabla === 'asistencias' || tabla === 'asistencia') { releerLocal(); revisarNube(); }
+    };
+    const alVolver = () => { if (document.visibilityState === 'visible') revisarNube(); };
+    window.addEventListener('nexus-realtime-change', alCambiar);
+    document.addEventListener('visibilitychange', alVolver);
+    return () => {
+      vivo = false;
+      clearInterval(intervalo);
+      window.removeEventListener('nexus-realtime-change', alCambiar);
+      document.removeEventListener('visibilitychange', alVolver);
+    };
+  }, []);
+
   const trabajadores = useMemo(() => {
     const unidas = new Map<string, Trabajador>();
     for (const t of [...trabajadoresPropios, ...trabajadoresProp]) if (t?.id) unidas.set(t.id, t);
     return Array.from(unidas.values());
   }, [trabajadoresProp, trabajadoresPropios]);
-  const asistencia = useMemo(() => unirAsistencia(asistenciaProp, asistenciaPropia), [asistenciaProp, asistenciaPropia]);
+  const asistencia = useMemo(
+    () => unirAsistencia(asistenciaProp, unirAsistencia(asistenciaPropia, asistenciaNube)),
+    [asistenciaProp, asistenciaPropia, asistenciaNube],
+  );
 
   const [seleccionado, setSeleccionado] = useState<Trabajador | null>(null);
   const [confirmando, setConfirmando] = useState(false);
@@ -121,14 +171,6 @@ export default function Asistencia({ trabajadores: trabajadoresProp, asistencia:
     [asistencia, hoy]
   );
 
-  const ultimoRegistroPorTrabajador = useMemo(() => {
-    const map = new Map<string, RegistroAsistencia>();
-    for (const r of asistencia.filter(x => x.fecha === hoy)) {
-      const prev = map.get(r.trabajadorId);
-      if (!prev || r.createdAt > prev.createdAt) map.set(r.trabajadorId, r);
-    }
-    return map;
-  }, [asistencia, hoy]);
 
   // Antes solo contaba estado === 'activo' exacto; "Activo" o " activo" quedaban por fuera.
   const trabajadoresActivos = useMemo(() => trabajadorasActivas(trabajadores, []), [trabajadores]);
@@ -160,17 +202,42 @@ export default function Asistencia({ trabajadores: trabajadoresProp, asistencia:
 
   async function registrar(trabajador: Trabajador, tipo: 'entrada' | 'salida') {
     if (confirmando) return;
+    const nombreCorto = trabajador.nombre.split(' ')[0];
+    // Ya llegó (en este aparato o en otro): no se marca dos veces
+    const ahora = estadoDelDia(asistencia, trabajador.id, hoy);
+    if (tipo === 'entrada' && ahora.estado === 'adentro') {
+      toast.info(`${nombreCorto} ya marcó su llegada a las ${horaLocalDeRegistro(ahora.llegada)}.`);
+      return;
+    }
+    if (tipo === 'salida' && ahora.estado !== 'adentro') {
+      toast.info(`${nombreCorto} todavía no ha marcado su llegada.`);
+      return;
+    }
     setConfirmando(true);
     setSeleccionado(trabajador);
     try {
+      // Revisar la nube por si la marcó hace un momento en otro celular (máx. 4 s; sin internet sigue)
+      if (tipo === 'entrada') {
+        const nube = await conLimite(asistenciaDeHoyEnNube(hoy), 4000).catch(() => null);
+        if (nube) {
+          setAsistenciaNube(nube);
+          const enNube = estadoDelDia(unirAsistencia(asistencia, nube), trabajador.id, hoy);
+          if (enNube.estado === 'adentro') {
+            toast.info(`${nombreCorto} ya marcó su llegada a las ${horaLocalDeRegistro(enNube.llegada)} en otro aparato.`);
+            setSeleccionado(null);
+            return;
+          }
+        }
+      }
       const hora = horaISO();
-      await onAddRegistro({
+      const nuevo = await onAddRegistro({
         trabajadorId: trabajador.id,
         trabajadorNombre: trabajador.nombre,
         tipo,
         fecha: hoy,
         hora,
       });
+      if (nuevo?.id) setAsistenciaPropia(prev => unirAsistencia([nuevo], prev));
       setExito({ tipo, hora: horaActual() });
       toast.success(tipo === 'entrada'
         ? `¡Bienvenida, ${trabajador.nombre.split(' ')[0]}!`
@@ -319,15 +386,19 @@ export default function Asistencia({ trabajadores: trabajadoresProp, asistencia:
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-w-3xl mx-auto">
               {trabajadoresActivos.map(t => {
-                const ultimo = ultimoRegistroPorTrabajador.get(t.id);
-                const estaAdentro = ultimo?.tipo === 'entrada';
+                const dia = estadoDelDia(asistencia, t.id, hoy);
+                const ultimo = dia.ultimo;
+                const estaAdentro = dia.estado === 'adentro';
+                const sinLlegar = dia.estado === 'sin-llegar';
                 const ocupada = confirmando && seleccionado?.id === t.id;
                 return (
                   <div key={t.id}
-                    className={`bg-white dark:bg-gray-800 rounded-2xl shadow-md p-4 border-2 transition-all ${
+                    className={`rounded-2xl shadow-md p-4 border-2 transition-all ${
                       estaAdentro
-                        ? 'border-emerald-300 dark:border-emerald-700'
-                        : 'border-transparent'
+                        ? 'bg-emerald-50 border-emerald-500 dark:bg-emerald-950/40 dark:border-emerald-600'
+                        : sinLlegar
+                          ? 'bg-white border-amber-300 dark:bg-gray-800 dark:border-amber-700'
+                          : 'bg-white border-gray-200 dark:bg-gray-800 dark:border-gray-700'
                     }`}>
 
                     {/* Nombre + estado */}
@@ -343,30 +414,42 @@ export default function Asistencia({ trabajadores: trabajadoresProp, asistencia:
                         <p className="font-bold text-gray-900 dark:text-white text-sm leading-tight truncate">
                           {t.nombre.split(' ').slice(0, 2).join(' ')}
                         </p>
-                        {ultimo ? (
-                          <span className={`text-xs font-medium ${
-                            estaAdentro ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-gray-500'
-                          }`}>
-                            {estaAdentro ? `✅ Llegó ${ultimo.hora}` : `👋 Salió ${ultimo.hora}`}
+                        {estaAdentro ? (
+                          <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                            ✅ Llegó a las {horaLocalDeRegistro(dia.llegada)}
                           </span>
-                        ) : (
-                          <span className="text-xs text-gray-400 dark:text-gray-500">Sin registro hoy</span>
-                        )}
+                        ) : ultimo ? (
+                          <span className="text-xs font-medium text-gray-600 dark:text-gray-300">
+                            👋 Salió a las {horaLocalDeRegistro(ultimo)}
+                          </span>
+                        ) : null}
                       </div>
                     </div>
 
-                    {/* Botones directos */}
+                    {/* Aviso: todavía no marca la llegada */}
+                    {sinLlegar && (
+                      <p className="mb-3 rounded-lg bg-amber-100 dark:bg-amber-900/40 px-3 py-2 text-xs font-bold text-amber-900 dark:text-amber-200" role="status">
+                        ⚠️ Todavía no ha marcado su llegada
+                      </p>
+                    )}
+
+                    {/* Botones directos: "Llegué" se bloquea en todos los aparatos cuando ya llegó */}
                     <div className="flex gap-2">
                       <button
                         onClick={() => registrar(t, 'entrada')}
-                        disabled={ocupada}
-                        className="flex-1 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-black text-sm transition-all shadow-sm shadow-emerald-500/30 disabled:opacity-40">
-                        ✅ Llegué
+                        disabled={ocupada || estaAdentro}
+                        aria-pressed={estaAdentro}
+                        className={`flex-1 py-3 rounded-xl font-black text-sm transition-all ${
+                          estaAdentro
+                            ? 'bg-emerald-600 text-white cursor-not-allowed'
+                            : 'bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white shadow-sm shadow-emerald-500/30 disabled:opacity-40'
+                        }`}>
+                        {estaAdentro ? '✔ Ya llegó' : ultimo ? '✅ Volví' : '✅ Llegué'}
                       </button>
                       <button
                         onClick={() => registrar(t, 'salida')}
-                        disabled={ocupada}
-                        className="flex-1 py-3 rounded-xl bg-rose-500 hover:bg-rose-600 active:scale-95 text-white font-black text-sm transition-all shadow-sm shadow-rose-500/30 disabled:opacity-40">
+                        disabled={ocupada || !estaAdentro}
+                        className="flex-1 py-3 rounded-xl bg-rose-500 hover:bg-rose-600 active:scale-95 text-white font-black text-sm transition-all shadow-sm shadow-rose-500/30 disabled:opacity-40 disabled:cursor-not-allowed">
                         👋 Me voy
                       </button>
                     </div>
@@ -404,7 +487,7 @@ export default function Asistencia({ trabajadores: trabajadoresProp, asistencia:
                         }`}>
                           {r.tipo === 'entrada' ? 'Entrada' : 'Salida'}
                         </span>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">{r.hora}</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">{horaLocalDeRegistro(r)}</p>
                       </div>
                     </div>
                   ))}

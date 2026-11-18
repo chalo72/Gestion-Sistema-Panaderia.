@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { esTrabajadoraActiva, trabajadorasActivas, unirAsistencia } from './asistencia-lista';
+import { esTrabajadoraActiva, trabajadorasActivas, unirAsistencia, estadoDelDia, horaLocalDeRegistro } from './asistencia-lista';
 
 const t = (id: string, nombre: string, estado: string) => ({ id, nombre, estado } as any);
 
@@ -25,5 +25,38 @@ describe('Turno / Asistencia: lista de trabajadoras', () => {
     const a = { id: 'r1', trabajadorId: '1', tipo: 'entrada', fecha: '2026-11-17', hora: '07:00' } as any;
     const b = { id: 'r2', trabajadorId: '2', tipo: 'entrada', fecha: '2026-11-17', hora: '07:05' } as any;
     expect(unirAsistencia([a], [a, b]).map(x => x.id).sort()).toEqual(['r1', 'r2']);
+  });
+});
+
+describe('estadoDelDia (botón Llegué bloqueado en todos los aparatos)', () => {
+  const hoy = '2026-11-17';
+  const reg = (id: string, tipo: 'entrada' | 'salida', createdAt: string, trabajadorId = 'ana') =>
+    ({ id, trabajadorId, trabajadorNombre: 'Ana', tipo, fecha: hoy, hora: '', createdAt } as any);
+
+  it('sin registros hoy → no ha marcado llegada', () => {
+    expect(estadoDelDia([], 'ana', hoy).estado).toBe('sin-llegar');
+    expect(estadoDelDia([{ ...reg('x', 'entrada', '2026-11-16T12:00:00Z'), fecha: '2026-11-16' }], 'ana', hoy).estado).toBe('sin-llegar');
+  });
+
+  it('con llegada (aunque venga de otro aparato) → adentro', () => {
+    const r = estadoDelDia([reg('1', 'entrada', '2026-11-17T12:05:00Z')], 'ana', hoy);
+    expect(r.estado).toBe('adentro');
+    expect(r.llegada?.id).toBe('1');
+  });
+
+  it('el último registro manda: llegó y salió → salió', () => {
+    const r = estadoDelDia([reg('2', 'salida', '2026-11-17T20:00:00Z'), reg('1', 'entrada', '2026-11-17T12:05:00Z')], 'ana', hoy);
+    expect(r.estado).toBe('salio');
+  });
+
+  it('no mezcla trabajadoras', () => {
+    expect(estadoDelDia([reg('1', 'entrada', '2026-11-17T12:05:00Z', 'luz')], 'ana', hoy).estado).toBe('sin-llegar');
+  });
+
+  it('la hora se muestra en hora local, no en UTC', () => {
+    const h = horaLocalDeRegistro({ hora: '12:05', createdAt: '2026-11-17T12:05:00.000Z' } as any);
+    const esperado = new Date('2026-11-17T12:05:00.000Z').toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit', hour12: true });
+    expect(h).toBe(esperado);
+    expect(horaLocalDeRegistro({ hora: '07:05' } as any)).toBe('07:05');
   });
 });

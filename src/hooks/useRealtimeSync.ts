@@ -507,6 +507,8 @@ export function useRealtimeSync() {
       ['produccion',      () => db.getAllOrdenesProduccion(), (d) => supabaseDB.addOrdenProduccion(d)],
       ['clientes',        () => db.getAllClientes(),         (d) => supabaseDB.addCliente(d)],
       ['nominas',         () => db.getAllNominas(),          (d) => supabaseDB.addNomina(d)],
+      // Llegadas/salidas: si el envío falló al presionar "Llegué", se reintenta aquí (2026-11-17)
+      ['asistencias',     () => db.getAllAsistencia(),       (d) => supabaseDB.addAsistencia(d)],
     ];
 
     await Promise.all(pushTasks.map(async ([tableName, getLocal, writeSupabase]) => {
