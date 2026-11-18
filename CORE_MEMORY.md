@@ -432,7 +432,7 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 - **Hecho en la nube**: el único precio del repetido (Gaseosa Pool 1ltro, $26.700 paca x12) se pasó al bueno sin cambiar el valor (`fecha_actualizacion = now()` para que los aparatos lo reciban).
 - **Hallazgo**: los aparatos NO leían las lápidas de la nube; uno apagado cuando se borraba algo lo volvía a subir. Arreglo en `syncNow`: si algo ya no está en la nube Y tiene lápida en la nube, no se resube y se borra localmente (solo tablas que sí se borran; ventas, cajas, inventario, nómina no se tocan). Rama `fix/recepcion-precio-paquete`.
 - **PUBLICADO 2026-11-18** (PR #15, commit `57d746e4`). Después se borró en la nube el proveedor repetido `Comercar Multimarcas` con lápida `proveedores:b8d4f2a1-6c93-4e7b-a521-9f3e8d1c7b05`. Verificado: ya no existe, queda solo CAMERCAR con 26 precios.
-- **Pendiente opcional**: que Recepción avise y use la paca de otro proveedor cuando el escogido no tiene precio.
+- **HECHO y PUBLICADO 2026-11-18** (PR #17, commit `81389d78`): en Recepción, si el proveedor escogido no tiene precio, se usa la paca más reciente de otro proveedor con aviso; solo al final el costo por unidad (también con aviso). El aviso de "cambio de precio" usa la misma regla, y al guardar el precio nuevo se copia el empaque. Regla en `src/lib/precio-recepcion.ts` (6 pruebas). No probado en celular real.
 ---
 
 ✅ COMPLETADO — Claude Sonnet 5 — 2026-09-19 — Auditoría en vivo pedida por Gonzalo: Modo Ayudante (masa/arrobas), acceso por rol VENDEDOR/PANADERO, e historial de Caja/Ventas.
