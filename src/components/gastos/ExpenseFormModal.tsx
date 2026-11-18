@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
+import { opcionesPersonaFamilia } from '@/lib/familia-duenos';
 import type { Gasto, GastoCategoria, MetodoPago, Proveedor } from '@/types';
 
 // ── Métodos de pago visuales ──────────────────────────────────────────────────
@@ -34,7 +35,7 @@ const METODOS = [
 ];
 
 // ── Categorías ────────────────────────────────────────────────────────────────
-const CATS_GASTO = ['Materia Prima', 'Servicios', 'Arriendo', 'Nómina', 'Mantenimiento', 'Otros'];
+const CATS_GASTO = ['Materia Prima', 'Servicios', 'Arriendo', 'Nómina', 'Mantenimiento', 'Familia', 'Otros'];
 const CATS_INGRESO = ['Venta', 'Anticipo', 'Préstamo recibido', 'Aporte socio', 'Otro ingreso'];
 
 interface ExpenseFormModalProps {
@@ -112,7 +113,7 @@ export function ExpenseFormModal({
 
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-lg rounded-2xl p-0 overflow-hidden border border-slate-200 dark:border-slate-700 bg-white dark:bg-gray-950">
+            <DialogContent className="max-w-lg rounded-2xl p-0 max-h-[90vh] overflow-y-auto border border-slate-200 dark:border-slate-700 bg-white dark:bg-gray-950">
                 {/* Header con color según modo */}
                 <div className={cn('p-5 text-white relative', headerCls)}>
                     <div className="flex items-center gap-4">
@@ -213,10 +214,16 @@ export function ExpenseFormModal({
                                 <Input
                                     type="number"
                                     value={formData.monto || ''}
-                                    onChange={e => setFormData({ ...formData, monto: parseFloat(e.target.value) || 0 })}
+                                    onChange={e => {
+                                        const m = parseFloat(e.target.value) || 0;
+                                        const q = (formData as any).cantidad || 1;
+                                        setFormData((formData as any).productoLibre
+                                            ? ({ ...formData, monto: m, precioUnitario: m / q } as any)
+                                            : { ...formData, monto: m });
+                                    }}
                                     className="h-11 pl-9 rounded-xl border border-slate-200 dark:border-slate-700 font-black tabular-nums text-base"
                                     placeholder="0"
-                                    readOnly={(formData.facturaItems?.length ?? 0) > 0 || (!!formData.productoLibre)}
+                                    readOnly={(formData.facturaItems?.length ?? 0) > 0}
                                 />
                             </div>
                         </div>
@@ -237,7 +244,11 @@ export function ExpenseFormModal({
                         <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Categoría</Label>
                         <Select
                             value={formData.categoria}
-                            onValueChange={val => setFormData({ ...formData, categoria: val as GastoCategoria })}
+                            onValueChange={val => setFormData({
+                                ...formData,
+                                categoria: val as GastoCategoria,
+                                ...(val !== 'Familia' ? { personaFamilia: undefined } : {}),
+                            })}
                         >
                             <SelectTrigger className="h-11 rounded-xl border border-slate-200 dark:border-slate-700 font-bold">
                                 <SelectValue placeholder={cats[0]} />
@@ -249,6 +260,27 @@ export function ExpenseFormModal({
                             </SelectContent>
                         </Select>
                     </div>
+
+                    {formData.categoria === 'Familia' && !esIngreso && (
+                        <div className="space-y-1.5">
+                            <Label className="text-[10px] font-black uppercase tracking-widest text-amber-600 ml-1">
+                                Quién de la familia *
+                            </Label>
+                            <Select
+                                value={formData.personaFamilia || ''}
+                                onValueChange={val => setFormData({ ...formData, personaFamilia: val })}
+                            >
+                                <SelectTrigger className="h-11 rounded-xl border border-amber-300 dark:border-amber-700 font-bold">
+                                    <SelectValue placeholder="Elegir persona…" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {opcionesPersonaFamilia().map(o => (
+                                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
                     
                     {/* Es Factura? */}
                     <div className="flex items-center gap-2 pt-2 pb-1">
@@ -336,13 +368,13 @@ export function ExpenseFormModal({
                     {/* Producto Individual (Si existe y no es múltiple) */}
                     {!formData.facturaItems?.length && (formData.productoLibre || formData.productoId) && (
                         <div className="space-y-1.5">
-                            <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Producto Individual</Label>
+                            <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Producto · Cantidad · Precio c/u</Label>
                             <div className="flex gap-2 bg-slate-50 dark:bg-slate-900/50 p-2 rounded-xl border border-slate-200 dark:border-slate-800">
                                 <Input
                                     value={formData.productoLibre || ''}
                                     onChange={e => setFormData({ ...formData, productoLibre: e.target.value })}
                                     placeholder="Nombre producto"
-                                    className="h-8 text-xs font-bold px-2"
+                                    className="h-11 text-sm font-bold px-2"
                                 />
                                 <Input
                                     type="number"
@@ -352,7 +384,7 @@ export function ExpenseFormModal({
                                         setFormData({ ...formData, cantidad: qty, monto: qty * (formData.precioUnitario || 0) });
                                     }}
                                     placeholder="Cant"
-                                    className="h-8 text-xs w-16 px-2 text-center"
+                                    className="h-11 text-sm w-16 px-2 text-center"
                                 />
                                 <Input
                                     type="number"
@@ -361,8 +393,8 @@ export function ExpenseFormModal({
                                         const price = parseFloat(e.target.value) || 0;
                                         setFormData({ ...formData, precioUnitario: price, monto: (formData.cantidad || 0) * price });
                                     }}
-                                    placeholder="Precio"
-                                    className="h-8 text-xs w-24 px-2"
+                                    placeholder="Precio c/u"
+                                    className="h-11 text-sm w-28 px-2"
                                 />
                             </div>
                         </div>

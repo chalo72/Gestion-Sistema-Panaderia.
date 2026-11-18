@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Brain, TrendingUp, AlertTriangle, ArrowRight, Zap, Target } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts';
+import { ymdLocal } from '@/lib/fecha-local';
 
 interface Venta {
     fecha: string;
@@ -25,7 +26,7 @@ export function MotorPredictivo({ ventas = [] }: { ventas: Venta[] }) {
 
         const limiteFecha = new Date();
         limiteFecha.setDate(limiteFecha.getDate() - diasHistorial);
-        const limiteStr = limiteFecha.toISOString().slice(0, 10);
+        const limiteStr = ymdLocal(limiteFecha);
 
         ventas.forEach(v => {
             const dateStr = (v.fecha || '').slice(0, 10);

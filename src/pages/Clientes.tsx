@@ -22,7 +22,8 @@ const TIPO_CLIENTE_CONFIG: Record<ClienteTipo, { label: string; color: string; b
   particular: { label: 'Particular', color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-950/30', icon: User },
   empresa: { label: 'Empresa', color: 'text-purple-600', bg: 'bg-purple-50 dark:bg-purple-950/30', icon: Building2 },
   frecuente: { label: 'Frecuente', color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-950/30', icon: Star },
-  mayorista: { label: 'Mayorista', color: 'text-indigo-600', bg: 'bg-indigo-50 dark:bg-indigo-950/30', icon: BadgeCheck },
+  // En operación Dulce Placer, "mayorista" = tienda / punto de reventa (no hay tipo CRM separado "tienda").
+  mayorista: { label: 'Mayorista / Tienda', color: 'text-indigo-600', bg: 'bg-indigo-50 dark:bg-indigo-950/30', icon: BadgeCheck },
 };
 
 interface ClientesProps {
@@ -117,6 +118,7 @@ export default function Clientes({ clientesExternos, onAddCliente, onUpdateClien
         ciudad: formData.ciudad || '',
         tipo: formData.tipo as ClienteTipo || 'particular',
         notas: formData.notas || '',
+        enConsumo: !!formData.enConsumo,
         createdAt: editando?.createdAt || new Date().toISOString(),
       };
 
@@ -569,6 +571,35 @@ export default function Clientes({ clientesExternos, onAddCliente, onUpdateClien
                     className="h-12 pl-12 bg-slate-50 dark:bg-slate-800 border-slate-100 rounded-2xl font-bold"
                   />
                 </div>
+              </div>
+
+              <div className="md:col-span-2">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={!!formData.enConsumo}
+                  onClick={() => setFormData({ ...formData, enConsumo: !formData.enConsumo })}
+                  className={cn(
+                    "w-full flex items-center justify-between gap-4 p-4 rounded-2xl border-2 text-left transition-all",
+                    formData.enConsumo
+                      ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20"
+                      : "border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800"
+                  )}
+                >
+                  <span>
+                    <span className="block text-sm font-black text-slate-800 dark:text-slate-100">Aparece en Consumo / Fiados</span>
+                    <span className="block text-xs font-bold text-slate-500 dark:text-slate-400">Para anotarle rápido lo que consume o se lleva fiado. Se guarda como crédito del cliente.</span>
+                  </span>
+                  <span className={cn(
+                    "shrink-0 w-12 h-7 rounded-full p-1 transition-colors",
+                    formData.enConsumo ? "bg-indigo-600" : "bg-slate-300 dark:bg-slate-600"
+                  )}>
+                    <span className={cn(
+                      "block w-5 h-5 rounded-full bg-white shadow transition-transform",
+                      formData.enConsumo ? "translate-x-5" : "translate-x-0"
+                    )} />
+                  </span>
+                </button>
               </div>
 
               <div className="md:col-span-2 space-y-2">

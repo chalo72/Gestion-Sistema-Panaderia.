@@ -6,6 +6,7 @@ import {
     Banknote, Coins, User, Clock, Lock, FileText
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 import type { CajaSesion, Mesa, PedidoActivo } from '@/types';
 
 const BILLETES_CIERRE = [
@@ -104,8 +105,18 @@ export function CierreCajaModal({ isOpen, onClose, onCerrar, cajaActiva, formatC
                   `. Motivo: ${motivoMesasAbiertas.trim()}`
                 : '';
             const notaFinal = [notaMesas, observaciones.trim()].filter(Boolean).join(' | ');
-            await onCerrar(totalDesglose, ventasManualNum > 0 ? ventasManualNum : undefined, notaFinal || undefined);
+            // 2026-10-02 (AUTORIZO Gonzalo): antes se llamaba a onCerrar sin mirar el
+            // resultado y se cerraba el modal SIEMPRE (y sin catch, por lo que un error
+            // real dejaba el boton como muerto). Ahora: si no devuelve la caja cerrada se
+            // avisa en rojo y el modal se queda abierto con el conteo ya escrito.
+            const resultado = await onCerrar(totalDesglose, ventasManualNum > 0 ? ventasManualNum : undefined, notaFinal || undefined);
+            if (!resultado) {
+                toast.error('No se pudo cerrar la caja. NO se guardo nada — revisa que la caja siga abierta y reintenta.');
+                return;
+            }
             onClose();
+        } catch (err: any) {
+            toast.error(err?.message || 'No se pudo cerrar la caja. NO se guardo nada.');
         } finally {
             setConfirmando(false);
         }

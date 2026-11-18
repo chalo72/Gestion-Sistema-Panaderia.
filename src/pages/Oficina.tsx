@@ -20,6 +20,7 @@ import {
   type AgenteId, AGENTES_CONFIG, consultarAgente
 } from '@/constants/agentes';
 import { AccesoGlobalCard } from '@/components/layout/AccesoGlobalCard';
+import { ymdLocal, hoyLocal } from '@/lib/fecha-local';
 
 interface InventarioItem { productoId: string; stock: number; stockMinimo?: number; }
 
@@ -79,13 +80,13 @@ export default function Oficina({ publicAppUrl, onViewChange, ventas = [], produ
 
   // ── KPIs REALES ──
   const kpis = useMemo(() => {
-    const hoy = new Date().toISOString().split('T')[0];
-    const ventasHoy = ventas.filter(v => v.fecha?.startsWith(hoy));
+    const hoy = hoyLocal();
+    const ventasHoy = ventas.filter(v => ymdLocal(v.fecha) === hoy);
     const totalHoy = ventasHoy.reduce((s, v) => s + v.total, 0);
 
     const ayer = new Date(); ayer.setDate(ayer.getDate() - 1);
-    const ayerStr = ayer.toISOString().split('T')[0];
-    const totalAyer = ventas.filter(v => v.fecha?.startsWith(ayerStr)).reduce((s, v) => s + v.total, 0);
+    const ayerStr = ymdLocal(ayer);
+    const totalAyer = ventas.filter(v => ymdLocal(v.fecha) === ayerStr).reduce((s, v) => s + v.total, 0);
     const diff = totalAyer > 0 ? ((totalHoy - totalAyer) / totalAyer * 100) : 0;
 
     const stockBajo = inventario.filter(i => i.stockMinimo !== undefined && i.stock <= i.stockMinimo);

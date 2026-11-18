@@ -6,7 +6,8 @@ import { ExpenseKPIs }      from '@/components/gastos/ExpenseKPIs';
 import { ExpenseList }      from '@/components/gastos/ExpenseList';
 import { ExpenseFormModal } from '@/components/gastos/ExpenseFormModal';
 import { QuickEntryBar }    from '@/components/gastos/QuickEntryBar';
-import { TurboExpenseManager } from '@/components/gastos/TurboExpenseManager';
+import { TurboExpenseManager, procesarAuditoriaPrecios } from '@/components/gastos/TurboExpenseManager';
+import { TesoreroIA } from '@/components/gastos/TesoreroIA';
 
 import type { Gasto, GastoCategoria, Proveedor, MetodoPago, Usuario, CajaSesion } from '@/types';
 import { procesarImagenFactura, sugerirCategoria, matchProveedorEnCatalogo } from '@/lib/ocr-service';
@@ -42,6 +43,7 @@ function cuadresComoIngresos(sesiones: CajaSesion[]): (Gasto & { esIngreso: true
         })
         .filter(i => i.monto > 0);
 }
+import { hoyLocal } from '@/lib/fecha-local';
 
 // ── Ingresos virtuales para el libro de caja ────────────────────────────────
 // Los ingresos se persisten en localStorage para no alterar el tipo Gasto en DB
@@ -250,6 +252,10 @@ export default function Gastos({
             toast.error('Ingresa la descripción y un monto válido');
             return;
         }
+        if (!data.esIngreso && data.categoria === 'Familia' && !data.personaFamilia?.trim()) {
+            toast.error('Retiro de familia: indica a quién salió la plata.');
+            return;
+        }
 
         setIsSaving(true);
         try {
@@ -301,6 +307,15 @@ export default function Gastos({
                         metodoPago: (data.metodoPago as MetodoPago) || 'efectivo',
                         proveedorId: data.proveedorId,
                     });
+                    // Si corrigió el precio de un producto con proveedor, actualizarlo en el catálogo
+                    const dx = data as any;
+                    if (data.proveedorId && dx.productoLibre && (dx.precioUnitario || 0) > 0) {
+                        await procesarAuditoriaPrecios(
+                            [{ nombre: dx.productoLibre, precioUnitario: dx.precioUnitario }],
+                            data.proveedorId,
+                            false
+                        );
+                    }
                 } else {
                     await onAddGasto({
 
@@ -313,6 +328,10 @@ export default function Gastos({
                         usuarioId: usuario.id,
                         proveedorId: data.proveedorId,
                         estado: 'pagado',
+                        personaFamilia: data.personaFamilia,
+                        metadata: data.personaFamilia
+                            ? { ...(data.metadata || {}), personaFamilia: data.personaFamilia }
+                            : data.metadata,
                     });
                     
                     // Sincronizar con Bóveda si aplica (solo al crear)
@@ -359,7 +378,7 @@ export default function Gastos({
     };
 
     // ── Entrada rápida (QuickEntryBar) ────────────────────────────────────────
-    const handleQuickSave = async (data: {  descripcion: string; monto: number; categoria: GastoCategoria; metodoPago: MetodoPago; esIngreso: boolean; fecha?: string; proveedorId?: string , origenTipo?: string, cajaId?: string, bovedaId?: string }) => {
+    const handleQuickSave = async (data: {  descripcion: string; monto: number; categoria: GastoCategoria; metodoPago: MetodoPago; esIngreso: boolean; fecha?: string; proveedorId?: string ; origenTipo?: string; cajaId?: string; bovedaId?: string; personaFamilia?: string; numeroFactura?: string; presentacion?: string }) => {
         const fechaElegida = data.fecha || new Date(Date.now() - (new Date()).getTimezoneOffset() * 60000).toISOString().split('T')[0];
         if (data.esIngreso) {
             const nuevo = {
@@ -378,6 +397,10 @@ export default function Gastos({
             guardarIngresos(actualizados);
             toast.success('Ingreso rápido guardado ✓');
         } else {
+            if (data.categoria === 'Familia' && !data.personaFamilia?.trim()) {
+                toast.error('Retiro de familia: indica a quién salió la plata.');
+                return;
+            }
             await onAddGasto({
                 descripcion: data.descripcion,
                 monto: data.monto,
@@ -390,7 +413,23 @@ export default function Gastos({
                 cajaId: data.cajaId,
                 bovedaId: data.bovedaId,
                 origenTipo: data.origenTipo,
-            });
+                personaFamilia: data.personaFamilia,
+                ...(data.numeroFactura ? { numeroFactura: data.numeroFactura } : {}),
+                ...(data.presentacion && data.presentacion !== 'unidad' ? { presentacion: data.presentacion } : {}),
+                metadata: data.personaFamilia ? { personaFamilia: data.personaFamilia } : undefined,
+            } as Omit<Gasto, 'id'>);
+            // 🩹 FIX 2026-10-09: si la plata sale de una BÓVEDA, descontarla de su saldo
+            // (antes solo lo hacía el formulario grande; el Modo Turbo/Clásico no).
+            if (data.bovedaId && data.bovedaId !== '__ninguno__') {
+                addMovimientoBoveda({
+                    bovedaOrigenId: data.bovedaId,
+                    monto: data.monto,
+                    motivo: `Gasto: ${data.descripcion}`,
+                    tipo: 'Egreso',
+                    usuarioResponsable: usuario.nombre || 'Administrador',
+                    metodoPago: data.metodoPago || 'Efectivo',
+                });
+            }
             toast.success('Gasto rápido guardado ✓');
         }
     };
@@ -495,7 +534,7 @@ export default function Gastos({
                                 const url = URL.createObjectURL(blob);
                                 const a = document.createElement('a');
                                 a.href = url;
-                                a.download = `ingresos-extras-${new Date().toISOString().slice(0, 10)}.json`;
+                                a.download = `ingresos-extras-${hoyLocal()}.json`;
                                 a.click();
                                 URL.revokeObjectURL(url);
                                 toast.success('Respaldo de ingresos descargado');
@@ -588,6 +627,8 @@ export default function Gastos({
                 filtroActivo={selectedCategory}
             />
 
+            <TesoreroIA gastos={gastos} formatCurrency={formatCurrency} />
+
             <ExpenseList
                 gastos={registrosFiltrados}
                 searchTerm={searchTerm}
@@ -616,6 +657,7 @@ export default function Gastos({
         </div>
     );
 }
+
 
 
 

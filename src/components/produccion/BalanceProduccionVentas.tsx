@@ -48,8 +48,9 @@ export function BalanceProduccionVentas({
                 ingresoVendido: 0
             };
 
-            const cantidad = safeNumber(orden.cantidadRealizada || orden.cantidadPlanificada);
-            const costo = safeNumber(orden.costoTotal);
+            // Fix 2026-09-30: los campos reales son cantidadCompletada/cantidadPlaneada y costoRealTotal/costoEstimadoTotal
+            const cantidad = safeNumber(orden.cantidadCompletada || orden.cantidadPlaneada);
+            const costo = safeNumber(orden.costoRealTotal ?? orden.costoEstimadoTotal);
 
             existing.producido += cantidad;
             existing.costoProducido += costo;

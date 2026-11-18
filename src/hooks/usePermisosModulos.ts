@@ -23,6 +23,7 @@ export const MODULOS_CONFIGURABLES: ModuloInfo[] = [
   { id: 'videovigilancia',  label: 'Videovigilancia',       seccion: 'General' },
   { id: 'cctv',             label: 'Auditoría Digital (CCTV)', seccion: 'General' },
   { id: 'whatsapp-hub',     label: 'Comandos WhatsApp & IA',   seccion: 'General' },
+  { id: 'marketing-studio', label: 'Marketing Studio IA',    seccion: 'General' },
   { id: 'ventas',           label: 'Ventas / POS',           seccion: 'Ventas' },
   { id: 'historial-ventas', label: 'Historial de Ventas',   seccion: 'Ventas' },
   { id: 'caja',             label: 'Control de Caja',        seccion: 'Ventas' },
@@ -60,8 +61,8 @@ export const ROLES_CONFIGURABLES = [
   { id: 'AUXILIAR',           label: 'Auxiliar',           color: 'bg-slate-500' },
 ];
 
-const VER_VENDEDOR   = ['dashboard','ventas','historial-ventas','caja','creditos','clientes','productos','asistencia','whatsapp-hub','inventario'];
-const VER_COMPRADOR  = ['dashboard','proveedores','prepedidos','recepciones','inventario','productos','precios','alertas','asistencia'];
+const VER_VENDEDOR   = ['dashboard','ventas','historial-ventas','caja','creditos','clientes','productos','asistencia','whatsapp-hub','inventario','marketing-studio','modo-ayudante','nomina'];
+const VER_COMPRADOR  = ['dashboard','proveedores','prepedidos','recepciones','inventario','productos','precios','alertas','asistencia','nomina'];
 const VER_CONTROL_FINANCIERO = [
   'dashboard',
   'caja',
@@ -85,8 +86,8 @@ const VER_CONTROL_FINANCIERO = [
   'asistencia',
   'whatsapp-hub',
 ];
-const VER_PANADERO   = ['dashboard','produccion','recetas','inventario','reportes','asistencia','whatsapp-hub','modo-ayudante'];
-const VER_AUXILIAR   = ['dashboard','ventas','asistencia'];
+const VER_PANADERO   = ['dashboard','produccion','recetas','inventario','reportes','asistencia','whatsapp-hub','modo-ayudante','nomina'];
+const VER_AUXILIAR   = ['dashboard','ventas','asistencia','nomina'];
 const TODOS          = MODULOS_CONFIGURABLES.map(m => m.id);
 
 function defaultParaRol(ids: string[]): PermisosRol {
@@ -116,6 +117,9 @@ const PATCH_VENDEDOR_INVENTARIO = 'dp_patch_vendedor_inventario_20260915';
 const PATCH_MODO_AYUDANTE = 'dp_patch_modo_ayudante_20260917';
 /** Parche: Panadero gana acceso a Captura Rápida (Atrasados) para registrar producciones atrasadas */
 const PATCH_PANADERO_MODO_AYUDANTE = 'dp_patch_panadero_modo_ayudante_20260918';
+const PATCH_VENDEDOR_MODO_AYUDANTE = 'dp_patch_vendedor_modo_ayudante_20260919';
+/** Parche: todos los roles no directivos pueden consultar el horario; Nómina oculta los datos financieros. */
+const PATCH_HORARIO_NOMINA = 'dp_patch_horario_nomina_roles_20261024';
 
 // ─── Persistencia ────────────────────────────────────────────────────────────
 
@@ -242,6 +246,35 @@ export function cargarPermisos(): PermisosModulos {
         changed = true;
       }
 
+      if (!localStorage.getItem(PATCH_VENDEDOR_MODO_AYUDANTE)) {
+        parsed = {
+          ...parsed,
+          VENDEDOR: {
+            ...(parsed.VENDEDOR || DEFAULT_PERMISOS.VENDEDOR),
+            'modo-ayudante': { ver: true, eliminar: false },
+          },
+        };
+        localStorage.setItem(PATCH_VENDEDOR_MODO_AYUDANTE, '1');
+        changed = true;
+      }
+
+      if (!localStorage.getItem(PATCH_HORARIO_NOMINA)) {
+        const rolesConHorario: Array<keyof PermisosModulos> = [
+          'CONTROL_FINANCIERO', 'COMPRADOR', 'VENDEDOR', 'PANADERO', 'AUXILIAR',
+        ];
+        for (const rol of rolesConHorario) {
+          parsed = {
+            ...parsed,
+            [rol]: {
+              ...(parsed[rol] || DEFAULT_PERMISOS[rol]),
+              nomina: { ver: true, eliminar: false },
+            },
+          };
+        }
+        localStorage.setItem(PATCH_HORARIO_NOMINA, '1');
+        changed = true;
+      }
+
       if (changed) {
         localStorage.setItem(PERMISOS_KEY, JSON.stringify(parsed));
       }
@@ -272,14 +305,15 @@ export function usePermisosModulos() {
   }, []);
 
   const puedeVer = (rol: string, moduloId: string): boolean => {
-    if (!rol || rol === 'ADMIN') return true;
+    if (!rol || (rol === 'ADMIN' || rol === 'admin' || rol === 'superadmin')) return true;
     return permisos[rol]?.[moduloId]?.ver ?? true;
   };
 
   const puedeEliminar = (rol: string, moduloId: string): boolean => {
-    if (!rol || rol === 'ADMIN') return true;
+    if (!rol || (rol === 'ADMIN' || rol === 'admin' || rol === 'superadmin')) return true;
     return permisos[rol]?.[moduloId]?.eliminar ?? false;
   };
 
   return { permisos, puedeVer, puedeEliminar };
 }
+

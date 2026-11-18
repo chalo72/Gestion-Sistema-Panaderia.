@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import {
   calcularProyeccionQuincena,
+  esCompromisoYaEnNomina,
   fechaLocalHoy,
   getCompromisos,
   getProducciones,
@@ -25,6 +26,8 @@ import {
   normalizarFechaYYYYMMDD,
   type RegistroProduccion,
 } from '@/lib/finanzas-personales';
+import { AvisosCompromisos } from '@/components/dashboard/AvisosCompromisos';
+import { useCan } from '@/contexts/AuthContext';
 
 export type NivelPulso = 'verde' | 'ambar' | 'rojo';
 
@@ -227,6 +230,8 @@ export function ManoDerechaDirector({
 }: ManoDerechaDirectorProps) {
   const hoy = fechaLocalHoy();
   const nombreCorto = (nombre || 'Director').split(' ')[0];
+  const { isAdmin, role } = useCan();
+  const veCompromisos = isAdmin || role === 'GERENTE';
 
   const proyeccion = useMemo(() => {
     const ventasNorm = ventas.map((v) => ({
@@ -238,7 +243,7 @@ export function ManoDerechaDirector({
       ventas: ventasNorm,
       ventasDiarias: getVentasDiarias(),
       gastos: [],
-      compromisos: getCompromisos(),
+      compromisos: getCompromisos().filter(c => !esCompromisoYaEnNomina(c)),
     });
   }, [ventas]);
 
@@ -262,10 +267,10 @@ export function ManoDerechaDirector({
       calcularPulso({
         itemsBajoStock,
         alertasNoLeidas,
-        alcanzaQuincena: proyeccion.alcanza,
-        deficit: proyeccion.deficit,
+        alcanzaQuincena: veCompromisos ? proyeccion.alcanza : true,
+        deficit: veCompromisos ? proyeccion.deficit : 0,
       }),
-    [itemsBajoStock, alertasNoLeidas, proyeccion.alcanza, proyeccion.deficit]
+    [itemsBajoStock, alertasNoLeidas, proyeccion.alcanza, proyeccion.deficit, veCompromisos]
   );
 
   const decisiones = useMemo(
@@ -276,8 +281,8 @@ export function ManoDerechaDirector({
         ingresosHoy,
         gastosHoy,
         ventasHoy,
-        alcanzaQuincena: proyeccion.alcanza,
-        deficit: proyeccion.deficit,
+        alcanzaQuincena: veCompromisos ? proyeccion.alcanza : true,
+        deficit: veCompromisos ? proyeccion.deficit : 0,
         hayProduccionHoy: produccionHoy.hayHoy,
         ultimaProduccionFecha: produccionHoy.ultimaFecha,
         formatCurrency,
@@ -295,6 +300,7 @@ export function ManoDerechaDirector({
       ventasHoy,
       proyeccion.alcanza,
       proyeccion.deficit,
+      veCompromisos,
       produccionHoy.hayHoy,
       produccionHoy.ultimaFecha,
       formatCurrency,
@@ -352,6 +358,11 @@ export function ManoDerechaDirector({
         </div>
       </div>
 
+      <AvisosCompromisos
+        formatCurrency={formatCurrency}
+        onIr={() => toast.info('Abre el menú → Reportes → Gestión de control de datos → Compromiso fijo.')}
+      />
+
       {/* Dinero + producción */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-950/50 p-4 sm:p-5">
@@ -394,6 +405,7 @@ export function ManoDerechaDirector({
               <p className="text-[10px] font-bold uppercase text-slate-400">Utilidad bruta (≈50%)</p>
               <p className="text-base font-bold">{formatCurrency(proyeccion.utilidadBruta)}</p>
             </div>
+            {veCompromisos && (
             <div>
               <p className="text-[10px] font-bold uppercase text-slate-400">¿Alcanza compromisos?</p>
               <p
@@ -407,6 +419,7 @@ export function ManoDerechaDirector({
                   : `No · faltan ${formatCurrency(proyeccion.deficit)}`}
               </p>
             </div>
+            )}
           </div>
         </div>
 

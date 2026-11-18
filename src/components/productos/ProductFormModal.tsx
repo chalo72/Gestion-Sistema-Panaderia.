@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
     Plus, Minus, Edit2, X, DollarSign, Store, Info,
     ShoppingCart, Warehouse, Check, Percent,
@@ -13,7 +13,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import type { Categoria, Proveedor } from '@/types';
+import { CATEGORIAS_DEFAULT } from '@/lib/seed-data';
+import type { Categoria, Proveedor, Producto } from '@/types';
 
 const COLORES_RAPIDOS = [
     '#f97316', '#3b82f6', '#10b981', '#8b5cf6',
@@ -39,6 +40,8 @@ interface ProductFormModalProps {
     onOpenChange: (open: boolean) => void;
     editingProducto: any;
     categorias: Categoria[];
+    /** Opcional: sirve para ocultar “categorías” que en realidad son nombres de productos. */
+    productos?: Producto[];
     proveedores: Proveedor[];
     formData: any;
     setFormData: (data: any) => void;
@@ -48,12 +51,57 @@ interface ProductFormModalProps {
     isSubmitting?: boolean;
 }
 
+const NOMBRES_CAT_SISTEMA = new Set(CATEGORIAS_DEFAULT.map((c) => c.nombre.toLowerCase().trim()));
+
+/** Detecta basura: categoría = nombre de producto (importaciones / sync huérfano). */
+function esCategoriaReal(cat: Categoria, nombresProductos: Set<string>): boolean {
+    const n = (cat.nombre || '').toLowerCase().trim();
+    if (!n) return false;
+    if (NOMBRES_CAT_SISTEMA.has(n)) return true;
+    if (nombresProductos.has(n)) return false;
+    // Heurística: nombres de producto suelen traer precios, paréntesis o ser muy largos
+    if (/\(\d|\d{3,}/.test(cat.nombre) || cat.nombre.length > 45) return false;
+    return true;
+}
+
 export function ProductFormModal({
-    isOpen, onOpenChange, editingProducto, categorias, proveedores,
+    isOpen, onOpenChange, editingProducto, categorias, productos = [], proveedores,
     formData, setFormData, onSubmit, formatCurrency, onAddCategoria,
     isSubmitting = false
 }: ProductFormModalProps) {
     const tipoActual = formData.tipo || 'elaborado';
+
+    const categoriasParaSelect = useMemo(() => {
+        const nombresProd = new Set(
+            (productos || []).map((p) => (p.nombre || '').toLowerCase().trim()).filter(Boolean)
+        );
+        const limpias = categorias.filter((c) => esCategoriaReal(c, nombresProd));
+        // Si hay contaminación masiva, priorizar sistema + las limpias
+        const base =
+            limpias.length >= 3
+                ? limpias
+                : [
+                      ...CATEGORIAS_DEFAULT,
+                      ...limpias.filter((c) => !NOMBRES_CAT_SISTEMA.has(c.nombre.toLowerCase().trim())),
+                  ];
+        const quiereInsumo = tipoActual === 'ingrediente';
+        const filtradas = base.filter((c) => {
+            if (!c.tipo) return true;
+            if (quiereInsumo) return c.tipo === 'insumo' || c.nombre.toUpperCase().startsWith('INS:');
+            return c.tipo === 'venta';
+        });
+        // Si el filtro por tipo deja vacío, mostrar todas las limpias
+        const lista = (filtradas.length > 0 ? filtradas : base).slice();
+        lista.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+        // Deduplicar por nombre
+        const seen = new Set<string>();
+        return lista.filter((c) => {
+            const k = c.nombre.toLowerCase().trim();
+            if (seen.has(k)) return false;
+            seen.add(k);
+            return true;
+        });
+    }, [categorias, productos, tipoActual]);
 
     // Estado mini-formulario de nueva categoría inline
     const [showNueva,    setShowNueva]    = useState(false);
@@ -261,30 +309,35 @@ export function ProductFormModal({
                                     <SelectTrigger className="h-12 rounded-xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-medium">
                                         <SelectValue placeholder="Seleccionar categoría..." />
                                     </SelectTrigger>
-                                    <SelectContent className="rounded-xl">
-                                        {/* Si la categoría guardada no existe en la lista, mostrarla como opción para que sea visible */}
-                                        {formData.categoria && !categorias.find(c => c.nombre === formData.categoria) && (
+                                    <SelectContent className="rounded-xl max-h-72">
+                                        {/* Si la categoría guardada no está en la lista limpia, mostrarla para poder cambiarla */}
+                                        {formData.categoria && !categoriasParaSelect.find(c => c.nombre === formData.categoria) && (
                                             <SelectItem value={formData.categoria} className="text-sm text-amber-600 font-bold">
                                                 <div className="flex items-center gap-2">
                                                     <span>⚠️</span>
-                                                    {formData.categoria} (sin registrar — cambia aquí)
+                                                    {formData.categoria} (cambia a una categoría real)
                                                 </div>
                                             </SelectItem>
                                         )}
-                                        {categorias.map(c => (
+                                        {categoriasParaSelect.map(c => (
                                             <SelectItem key={c.id} value={c.nombre} className="text-sm">
                                                 <div className="flex items-center gap-2">
                                                     <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: c.color }} />
+                                                    {c.icono ? <span className="text-xs">{c.icono}</span> : null}
                                                     {c.nombre}
                                                 </div>
                                             </SelectItem>
                                         ))}
                                     </SelectContent>
                                 </Select>
-                                {/* Aviso si la categoría no está registrada en el sistema */}
-                                {formData.categoria && !categorias.find(c => c.nombre === formData.categoria) && (
+                                {formData.categoria && !categoriasParaSelect.find(c => c.nombre === formData.categoria) && (
                                     <p className="text-xs text-amber-600 font-semibold mt-1 pl-1">
-                                        ⚠️ Categoría "{formData.categoria}" no está registrada. Selecciona una de la lista.
+                                        Elige una categoría real (Panes, Pastelería, INS: Helados…). No uses el nombre del producto.
+                                    </p>
+                                )}
+                                {categoriasParaSelect.length === 0 && (
+                                    <p className="text-xs text-rose-600 font-semibold mt-1 pl-1">
+                                        No hay categorías. Pulsa «Nueva» para crear una.
                                     </p>
                                 )}
 

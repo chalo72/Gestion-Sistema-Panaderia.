@@ -85,6 +85,49 @@ export function updateBovedaSaldo(id: string, montoCambio: number): void {
   }
 }
 
+/** Establece el saldo REAL físico de una bóveda (sobreescribe, no suma).
+ *  Registra un movimiento de "Ajuste de Corte" para dejar trazabilidad. */
+export function setBovedaSaldoReal(id: string, saldoReal: number, responsable: string): MovimientoBoveda | null {
+  const bovedas = getBovedas();
+  const index = bovedas.findIndex(b => b.id === id);
+  if (index === -1) return null;
+  const diferencia = saldoReal - bovedas[index].saldo;
+  if (diferencia === 0) return null;
+  bovedas[index].saldo = saldoReal;
+  saveBovedas(bovedas);
+  // Trazabilidad: dejar movimiento de ajuste
+  const tipo: TipoMovimientoBoveda = diferencia > 0 ? 'Ingreso' : 'Egreso';
+  const mov: MovimientoBoveda = {
+    id: generateUUID(),
+    monto: Math.abs(diferencia),
+    motivo: `Ajuste de saldo real (corte físico)`,
+    tipo,
+    fecha: new Date().toISOString(),
+    usuarioResponsable: responsable,
+    metodoPago: 'Ajuste',
+    bovedaDestinoId: tipo === 'Ingreso' ? id : undefined,
+    bovedaOrigenId: tipo === 'Egreso' ? id : undefined,
+  };
+  saveMovimientos([mov, ...getMovimientosBoveda()]);
+  return mov;
+}
+
+/** Elimina una bóveda (solo si saldo = 0 o se fuerza). */
+export function deleteBoveda(id: string): boolean {
+  const bovedas = getBovedas();
+  const updated = bovedas.filter(b => b.id !== id);
+  if (updated.length === bovedas.length) return false;
+  saveBovedas(updated);
+  return true;
+}
+
+/** Renombra una bóveda. */
+export function renameBoveda(id: string, nombre: string): void {
+  const bovedas = getBovedas();
+  const index = bovedas.findIndex(b => b.id === id);
+  if (index !== -1) { bovedas[index].nombre = nombre; saveBovedas(bovedas); }
+}
+
 // ── Movimientos ─────────────────────────────────────
 
 export function getMovimientosBoveda(): MovimientoBoveda[] {

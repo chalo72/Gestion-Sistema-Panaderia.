@@ -18,6 +18,7 @@ import {
 } from 'recharts';
 import { cn } from '@/lib/utils';
 import { ymdLocalDeISO } from '@/lib/fecha-local';
+import { HistorialCajasDia } from '@/components/caja/HistorialCajasDia';
 
 interface ArqueoCajasProps {
     ventasDiarias: VentaDiaria[];
@@ -367,6 +368,17 @@ export function ArqueoCajas({ ventasDiarias, sesionesCaja = [] }: ArqueoCajasPro
                     </div>
                 )}
             </div>
+
+            {/* 2026-10-09: control de caja de un día, ordenado por turno (igual que en Control de Caja → Historial) */}
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2"><CalendarDays className="w-5 h-5" /> Control de caja por día</CardTitle>
+                    <CardDescription>Elige la fecha: cada turno con sus cajas, horas, base, cierre y lo que se entregó en Bóveda.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <HistorialCajasDia sesiones={sesionesCaja} />
+                </CardContent>
+            </Card>
         </div>
     );
 }

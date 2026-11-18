@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { leerNube, guardarNubeKv } from '@/lib/nube-kv';
+import { hoyLocal, ymdLocal } from '@/lib/fecha-local';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -31,6 +33,9 @@ interface BaseConfig {
     margenVenta: number;
     precioVentaManual: string;
     mlPorCaja: string;
+    /** 2026-10-09: sabores/cajas usados, para que al EDITAR el costo del helado no quede en $0. */
+    cajas?: { id: string; cajas: number }[];
+    actualizado?: number;
 }
 
 interface IceCreamAssistantModalProps {
@@ -42,6 +47,8 @@ interface IceCreamAssistantModalProps {
     onUpdateProducto?: (id: string, updates: any) => void;
     onDeleteProducto?: (id: string) => void;
     formatCurrency: (val: number) => string;
+    sesionesCaja?: any[];
+    gastos?: any[];
 }
 
 // ─── Storage ──────────────────────────────────────────────────────────────────
@@ -53,12 +60,40 @@ const getStoredConfigs = (): Record<string, BaseConfig> => {
     try { return JSON.parse(localStorage.getItem(CONFIGS_KEY) || '{}'); } catch { return {}; }
 };
 
+// 2026-10-09 (AUTORIZO Gonzalo): las recetas también van a la nube (antes solo en este navegador,
+// máximo 12 y se borraba la más vieja) para que cualquier aparato pueda editar un helado.
+const NUBE_RECETAS = 'helados_recetas';
+const NUBE_PRECIOS_INSUMOS = 'helados_precios_insumos';
+
 const saveConfig = (name: string, config: BaseConfig) => {
     const all = getStoredConfigs();
-    all[name] = config;
-    const keys = Object.keys(all);
-    if (keys.length > 12) delete all[keys[0]];
+    all[name] = { ...config, actualizado: Date.now() };
+    const keys = Object.keys(all).sort((a, b) => (all[a].actualizado || 0) - (all[b].actualizado || 0));
+    while (keys.length > 80) delete all[keys.shift()!];
     localStorage.setItem(CONFIGS_KEY, JSON.stringify(all));
+    guardarNubeKv(NUBE_RECETAS, all).catch(() => { /* sin nube: queda local */ });
+};
+
+/** Une recetas locales y de la nube; gana la más reciente de cada helado. */
+const unirRecetas = (local: Record<string, BaseConfig>, nube: any): Record<string, BaseConfig> => {
+    const out = { ...local };
+    if (nube && typeof nube === 'object' && !Array.isArray(nube)) {
+        for (const [k, v] of Object.entries(nube as Record<string, BaseConfig>)) {
+            if (!v || typeof v !== 'object') continue;
+            if (!out[k] || (v.actualizado || 0) > (out[k].actualizado || 0)) out[k] = v;
+        }
+    }
+    return out;
+};
+
+/** Último precio de costo registrado (no el promedio de todos los precios viejos). */
+export const ultimoPrecioCosto = (precios: any[], productoId: string): { valor: number; dias: number | null } => {
+    const lista = (precios || [])
+        .filter(pr => pr.productoId === productoId && parseFloat(pr.precioCosto?.toString() || '0') > 0)
+        .sort((a, b) => new Date(b.fechaActualizacion || 0).getTime() - new Date(a.fechaActualizacion || 0).getTime());
+    if (lista.length === 0) return { valor: 0, dias: null };
+    const t = new Date(lista[0].fechaActualizacion || 0).getTime();
+    return { valor: parseFloat(lista[0].precioCosto.toString()), dias: Number.isFinite(t) && t > 0 ? Math.floor((Date.now() - t) / 86400000) : null };
 };
 
 // Cache de precios de insumos extras (vasos, cucharitas, etc.)
@@ -70,6 +105,7 @@ const saveExtraPrice = (productoId: string, precio: number) => {
     const all = getExtraPrices();
     all[productoId] = precio;
     localStorage.setItem(EXTRA_PRICES_KEY, JSON.stringify(all));
+    guardarNubeKv(NUBE_PRECIOS_INSUMOS, all).catch(() => { /* sin nube */ });
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -77,6 +113,18 @@ const saveExtraPrice = (productoId: string, precio: number) => {
 const UNIDADES = ['und', 'g', 'ml', 'kg'];
 
 const roundTo50 = (v: number) => Math.ceil(v / 50) * 50;
+
+const ONZAS_VASO = ['3', '3.3', '5', '7', '9'];
+
+function plataDeSesion(s: any): number {
+    const ventas = Number(s?.totalVentas) || 0;
+    if (ventas > 0) return ventas;
+    if (s?.estado !== 'cerrada') return 0;
+    const movimientos = Array.isArray(s.movimientos) ? s.movimientos : [];
+    const entradas = movimientos.filter((m: any) => m.tipo === 'entrada').reduce((a: number, m: any) => a + (Number(m.monto) || 0), 0);
+    const salidas = movimientos.filter((m: any) => m.tipo === 'salida').reduce((a: number, m: any) => a + (Number(m.monto) || 0), 0);
+    return Math.max(0, (Number(s.montoCierre) || 0) - (Number(s.montoApertura) || 0) - entradas + salidas);
+}
 
 let _nextId = 10;
 const nextId = () => `b${_nextId++}`;
@@ -86,9 +134,15 @@ const nextId = () => `b${_nextId++}`;
 export function IceCreamAssistantModal({
     isOpen, onOpenChange, productos, precios,
     onAddProducto, onUpdateProducto, onDeleteProducto,
-    formatCurrency
+    formatCurrency, sesionesCaja = [], gastos = [],
 }: IceCreamAssistantModalProps) {
     const [mode, setMode]                         = useState<'wizard' | 'history'>('wizard');
+    const [camino, setCamino]                     = useState<'caja' | 'empaque'>('caja');
+    const [onzaVaso, setOnzaVaso]                 = useState('');
+    const [empaqueNombre, setEmpaqueNombre]       = useState('');
+    const [empaquePrecioPack, setEmpaquePrecioPack] = useState('');
+    const [empaqueUnidades, setEmpaqueUnidades]   = useState('');
+    const [empaquePrecioVenta, setEmpaquePrecioVenta] = useState('');
     const [step, setStep]                         = useState(1);
     const [loading, setLoading]                   = useState(false);
     const [editingProductoId, setEditingProductoId] = useState<string | null>(null);
@@ -159,12 +213,8 @@ export function IceCreamAssistantModal({
     const { totalCostoCajas, totalMlDisponible, promedioMaestro, totalCajas } = useMemo(() => {
         let totalCosto = 0, totalC = 0;
         cajasSeleccionadas.forEach(({ id, cajas }) => {
-            const vals = precios
-                .filter(pr => pr.productoId === id)
-                .map(pr => parseFloat(pr.precioCosto?.toString() || '0'))
-                .filter(v => v > 0);
-            const precioPromCaja = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
-            totalCosto += precioPromCaja * cajas;
+            const precioCaja = ultimoPrecioCosto(precios, id).valor;
+            totalCosto += precioCaja * cajas;
             totalC     += cajas;
         });
         return {
@@ -176,6 +226,31 @@ export function IceCreamAssistantModal({
     }, [cajasSeleccionadas, precios, mlPorCajaNum]);
 
     const costoPorMl    = mlPorCajaNum > 0 ? promedioMaestro / mlPorCajaNum : 0;
+
+    const gananciaHelados = useMemo(() => {
+        const hoy = hoyLocal();
+        const mes = hoy.slice(0, 7);
+        const dia = Number(hoy.slice(8, 10)) || 1;
+        const enQuincena = (fecha: string) => {
+            const ymd = ymdLocal(fecha);
+            if (!ymd.startsWith(mes)) return false;
+            const d = Number(ymd.slice(8, 10)) || 0;
+            return dia <= 15 ? d >= 1 && d <= 15 : d >= 16;
+        };
+        const entro = (Array.isArray(sesionesCaja) ? sesionesCaja : [])
+            .filter(s => /helado/i.test(String(s?.cajaNombre || '')) && enQuincena(s?.fechaApertura))
+            .reduce((s, c) => s + plataDeSesion(c), 0);
+        const salio = (Array.isArray(gastos) ? gastos : [])
+            .filter(g => g?.estado !== 'anulado' && enQuincena(g?.fecha) && /helado/i.test(`${g?.descripcion || ''} ${g?.categoria || ''}`))
+            .reduce((s, g) => s + (Number(g.monto) || 0), 0);
+        return { entro, salio, queda: entro - salio };
+    }, [sesionesCaja, gastos]);
+
+    const unidadesEmpaque = parseFloat(empaqueUnidades) || 0;
+    const precioPackEmpaque = parseFloat(empaquePrecioPack) || 0;
+    const ventaEmpaque = parseFloat(empaquePrecioVenta) || 0;
+    const costoEmpaqueUna = unidadesEmpaque > 0 ? precioPackEmpaque / unidadesEmpaque : 0;
+    const gananciaEmpaqueUna = ventaEmpaque - costoEmpaqueUna;
     const costoPor1000g = costoPorMl * 1000;
 
     // ── Cálculos paso 2 ───────────────────────────────────────────────────────
@@ -205,8 +280,7 @@ export function IceCreamAssistantModal({
     const extraPackCosto = useMemo(() => {
         if (extraForm.precioPack) return parseFloat(extraForm.precioPack) || 0;
         if (!extraForm.productoId) return 0;
-        const precObj = precios.find(pr => pr.productoId === extraForm.productoId);
-        const desdePrecio = parseFloat(precObj?.precioCosto?.toString() || '0');
+        const desdePrecio = ultimoPrecioCosto(precios, extraForm.productoId).valor;
         if (desdePrecio > 0) return desdePrecio;
         const prod = productos.find(p => p.id === extraForm.productoId);
         const desdeProd = parseFloat(prod?.costoBase?.toString() || '0') || parseFloat(prod?.precioVenta?.toString() || '0');
@@ -247,6 +321,7 @@ export function IceCreamAssistantModal({
             setMargenVenta(cfg.margenVenta ?? 45);
             setPrecioVentaManual(cfg.precioVentaManual || '');
             if (cfg.mlPorCaja) setMlPorCaja(cfg.mlPorCaja);
+            if (cfg.cajas?.length) setCajasSeleccionadas(cfg.cajas);
             toast.success(`Config "${name}" cargada`);
         }
     };
@@ -287,7 +362,7 @@ export function IceCreamAssistantModal({
         const unidadesEnPack  = parseFloat(extraForm.unidadesEnPack) || 1;
         const costoUnitario   = costoPackTotal / unidadesEnPack;
         const cantidadPorCopa = parseFloat(extraForm.cantidadPorCopa) || 1;
-        const costoPorCopa    = roundTo50(costoUnitario * cantidadPorCopa);
+        const costoPorCopa    = costoUnitario * cantidadPorCopa; // sin redondear: una cucharita de $30 cuenta $30
         // Guardar precio en cache para auto-detectar la próxima vez
         if (costoPackTotal > 0) saveExtraPrice(prod.id, costoPackTotal);
         const item = { productoId: prod.id, nombre: prod.nombre, costoPackTotal, unidadesEnPack, costoUnitario, unidad: extraForm.unidad, cantidadPorCopa, costoPorCopa };
@@ -331,7 +406,15 @@ export function IceCreamAssistantModal({
         setNombreBase(producto.nombre);
         setEditingProductoId(producto.id);
         setMode('wizard');
-        setStep(2);
+        // 2026-10-09: sin sabores elegidos el costo del helado daba $0 al editar.
+        if (cfg?.cajas?.length) {
+            setCajasSeleccionadas(cfg.cajas);
+            setStep(2);
+        } else {
+            setCajasSeleccionadas([]);
+            setStep(1);
+            toast.info('Elige los sabores (cajas) de este helado para calcular bien su costo.');
+        }
     };
 
     // ── Save ─────────────────────────────────────────────────────────────────
@@ -358,10 +441,34 @@ export function IceCreamAssistantModal({
                 await onAddProducto(datos);
                 toast.success(`"${nombre}" creado ✓`);
             }
-            saveConfig(nombre, { bolasLista, extrasProducto, margenVenta, precioVentaManual, mlPorCaja });
+            saveConfig(nombre, { bolasLista, extrasProducto, margenVenta, precioVentaManual, mlPorCaja, cajas: cajasSeleccionadas });
             setMode('history');
             resetWizard();
         } catch { toast.error('Error al guardar'); }
+        finally { setLoading(false); }
+    };
+
+    const guardarEmpaque = async () => {
+        const nombre = empaqueNombre.trim();
+        if (!nombre) { toast.error('Escribe el nombre del empaque'); return; }
+        if (precioPackEmpaque <= 0 || unidadesEmpaque <= 0) { toast.error('Escribe el precio del paquete y cuántas unidades trae'); return; }
+        if (ventaEmpaque <= 0) { toast.error('Escribe a cuánto vendes una'); return; }
+        setLoading(true);
+        try {
+            await onAddProducto({
+                nombre,
+                categoria: 'HELADOS PRE',
+                descripcion: `Empaque. Paquete ${formatCurrency(precioPackEmpaque)} entre ${unidadesEmpaque} unidades.`,
+                precioVenta: ventaEmpaque,
+                margenUtilidad: ventaEmpaque > 0 ? ((gananciaEmpaqueUna / ventaEmpaque) * 100).toFixed(0) : '0',
+                tipo: 'elaborado',
+                unidadMedida: 'unidad',
+                costoBase: costoEmpaqueUna,
+            });
+            toast.success(`${nombre} guardado. Cada uno cuesta ${formatCurrency(costoEmpaqueUna)}`);
+            setEmpaqueNombre(''); setEmpaquePrecioPack(''); setEmpaqueUnidades(''); setEmpaquePrecioVenta('');
+            setMode('history');
+        } catch { toast.error('No se pudo guardar el empaque'); }
         finally { setLoading(false); }
     };
 
@@ -426,6 +533,21 @@ export function IceCreamAssistantModal({
             }
         } catch {}
         setConfigsGuardadas(v3);
+        // Traer recetas y precios de insumos guardados desde otros aparatos
+        void leerNube(NUBE_RECETAS).then(nube => {
+            const unidas = unirRecetas(getStoredConfigs(), nube);
+            localStorage.setItem(CONFIGS_KEY, JSON.stringify(unidas));
+            setConfigsGuardadas(unidas);
+            // Si este aparato tiene recetas que la nube no tiene (las hechas antes del 9 oct), subirlas.
+            const enNube = (nube && typeof nube === 'object' && !Array.isArray(nube)) ? nube as Record<string, BaseConfig> : {};
+            const faltan = Object.keys(unidas).some(k => !enNube[k] || (unidas[k].actualizado || 0) > (enNube[k].actualizado || 0));
+            if (faltan) guardarNubeKv(NUBE_RECETAS, unidas).catch(() => { /* sin nube */ });
+        }).catch(() => { /* sin nube */ });
+        void leerNube(NUBE_PRECIOS_INSUMOS).then(nube => {
+            if (nube && typeof nube === 'object' && !Array.isArray(nube)) {
+                localStorage.setItem(EXTRA_PRICES_KEY, JSON.stringify({ ...(nube as any), ...getExtraPrices() }));
+            }
+        }).catch(() => { /* sin nube */ });
     }, [isOpen]);
 
     const STEP_LABELS = ['Cajas', 'Configurar', 'Guardar'];
@@ -491,6 +613,46 @@ export function IceCreamAssistantModal({
 
                 {/* ── Contenido ──────────────────────────────────────────── */}
                 <div className="p-5 max-h-[64vh] overflow-y-auto space-y-4">
+                    <div className="rounded-2xl border-2 border-slate-950 p-4 space-y-1">
+                        <p className="text-lg font-black text-slate-950">Caja Helados, esta quincena</p>
+                        <p className="text-base font-bold text-slate-950">Entró en cuadres: {formatCurrency(gananciaHelados.entro)}</p>
+                        <p className="text-base font-bold text-slate-950">Salió en egresos que dicen helado: {formatCurrency(gananciaHelados.salio)}</p>
+                        <p className={`text-2xl font-black ${gananciaHelados.queda >= 0 ? 'text-emerald-800' : 'text-rose-700'}`}>
+                            {gananciaHelados.queda >= 0 ? 'Queda' : 'Falta'} {formatCurrency(Math.abs(gananciaHelados.queda))}
+                        </p>
+                    </div>
+                    {mode === 'wizard' && (
+                        <div className="grid grid-cols-2 gap-3">
+                            <button type="button" onClick={() => setCamino('caja')}
+                                className={`rounded-2xl p-4 text-left font-black text-lg ${camino === 'caja' ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-950'}`}>
+                                Caja por bolas
+                                <span className="block text-sm font-bold">La cuenta de siempre</span>
+                            </button>
+                            <button type="button" onClick={() => setCamino('empaque')}
+                                className={`rounded-2xl p-4 text-left font-black text-lg ${camino === 'empaque' ? 'bg-emerald-800 text-white' : 'bg-emerald-100 text-emerald-950'}`}>
+                                Empaque
+                                <span className="block text-sm font-bold">Paquete partido en unidades</span>
+                            </button>
+                        </div>
+                    )}
+                    {mode === 'wizard' && camino === 'empaque' && (
+                        <div className="space-y-3">
+                            <p className="text-base font-bold text-slate-950">Precio del paquete, cuántas unidades trae y a cuánto vendes una. Esto no toca las bolas ni la copa.</p>
+                            <Input value={empaqueNombre} onChange={e => setEmpaqueNombre(e.target.value)} placeholder="Nombre. Ej: Paleta de agua" className="h-12 text-base font-black" />
+                            <Input type="number" min="0" value={empaquePrecioPack} onChange={e => setEmpaquePrecioPack(e.target.value)} placeholder="Precio del paquete" className="h-12 text-base font-black" />
+                            <Input type="number" min="1" value={empaqueUnidades} onChange={e => setEmpaqueUnidades(e.target.value)} placeholder="Cuántas unidades trae" className="h-12 text-base font-black" />
+                            <Input type="number" min="0" value={empaquePrecioVenta} onChange={e => setEmpaquePrecioVenta(e.target.value)} placeholder="A cuánto vendes una" className="h-12 text-base font-black" />
+                            {costoEmpaqueUna > 0 && (
+                                <div className="rounded-2xl border-2 border-emerald-800 p-4">
+                                    <p className="text-base font-bold text-slate-950">Una cuesta {formatCurrency(costoEmpaqueUna)}</p>
+                                    <p className={`text-2xl font-black ${gananciaEmpaqueUna >= 0 ? 'text-emerald-800' : 'text-rose-700'}`}>
+                                        {gananciaEmpaqueUna >= 0 ? 'Ganas' : 'Pierdes'} {formatCurrency(Math.abs(gananciaEmpaqueUna))} en cada una
+                                    </p>
+                                </div>
+                            )}
+                            <Button type="button" disabled={loading} onClick={guardarEmpaque} className="w-full h-12 bg-emerald-800 text-white font-black text-lg">Guardar empaque</Button>
+                        </div>
+                    )}
 
                     {/* ════════ HISTORIAL — MIS HELADOS ════════ */}
                     {mode === 'history' && (
@@ -584,14 +746,14 @@ export function IceCreamAssistantModal({
                     )}
 
                     {/* ════════ PASO 1 — CAJAS ════════ */}
-                    {mode === 'wizard' && step === 1 && (
+                    {mode === 'wizard' && camino === 'caja' && step === 1 && (
                         <>
                             <div className="grid grid-cols-2 gap-3">
                                 <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
                                     <Label className="text-[9px] font-black uppercase text-slate-500 tracking-widest block mb-1">
-                                        g o ml por caja
+                                        Gramos de helado por caja
                                     </Label>
-                                    <p className="text-[9px] text-slate-400 mb-2">10 kg → <strong>10000</strong> · 5 L → <strong>5000</strong></p>
+                                    <p className="text-[9px] text-slate-400 mb-2">Lo que dice la caja: 10 kg → <strong>10000</strong>. Si la caja dice litros, pésala.</p>
                                     <Input type="number" min="100" value={mlPorCaja}
                                         onChange={e => setMlPorCaja(e.target.value)}
                                         className="h-10 font-black text-base w-32" />
@@ -631,7 +793,7 @@ export function IceCreamAssistantModal({
                                     <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center space-y-1">
                                         <p className="text-sm font-black text-amber-700">Sin cajas de helado registradas</p>
                                         <p className="text-[11px] text-amber-600">
-                                            Ve a <strong>Productos → Nuevo producto</strong>, crea insumos con categoría <strong>"INS: Helados"</strong> o con la palabra "caja" en el nombre.
+                                            Ve a <strong>Productos → Nuevo producto</strong> y crea la caja con la palabra <strong>helado</strong> en el nombre o en la categoría.
                                         </p>
                                     </div>
                                 ) : (
@@ -639,10 +801,8 @@ export function IceCreamAssistantModal({
                                         {insumosLista.map(p => {
                                             const isSel = selectedIds.includes(p.id);
                                             const item  = cajasSeleccionadas.find(c => c.id === p.id);
-                                            const allP  = precios.filter(pr => pr.productoId === p.id);
-                                            const pCosto = allP.length > 0
-                                                ? allP.reduce((s, pr) => s + parseFloat(pr.precioCosto?.toString() || '0'), 0) / allP.length
-                                                : 0;
+                                            const up = ultimoPrecioCosto(precios, p.id);
+                                            const pCosto = up.valor;
                                             return (
                                                 <div key={p.id} onClick={() => toggleCaja(p.id)}
                                                     className={cn(
@@ -658,8 +818,12 @@ export function IceCreamAssistantModal({
                                                     <div className="flex-1 min-w-0">
                                                         <p className="text-[11px] font-black text-slate-800 uppercase truncate">{p.nombre}</p>
                                                         <p className="text-[10px] font-bold text-slate-400">
-                                                            {pCosto > 0 ? formatCurrency(pCosto) : 'Sin precio'}
-                                                            {allP.length > 1 && <span className="text-cyan-500 ml-1">({allP.length} proveedores, promedio)</span>}
+                                                            {pCosto > 0 ? formatCurrency(pCosto) : <span className="text-rose-600">Sin precio: cuenta $0</span>}
+                                                            {pCosto > 0 && up.dias != null && (
+                                                                <span className={cn('ml-1', up.dias > 30 ? 'text-amber-600' : 'text-slate-400')}>
+                                                                    · precio de hace {up.dias} día{up.dias === 1 ? '' : 's'}{up.dias > 30 ? ' — ¿sigue igual?' : ''}
+                                                                </span>
+                                                            )}
                                                         </p>
                                                     </div>
                                                     {isSel && item && (
@@ -687,7 +851,7 @@ export function IceCreamAssistantModal({
                                 <div className="grid grid-cols-2 gap-3">
                                     <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-center">
                                         <p className="text-[9px] font-black uppercase text-blue-500">Stock disponible</p>
-                                        <p className="text-xl font-black text-blue-700 mt-0.5">{(totalMlDisponible/1000).toFixed(1)} kg/L</p>
+                                        <p className="text-xl font-black text-blue-700 mt-0.5">{(totalMlDisponible/1000).toFixed(1)} kg</p>
                                         <p className="text-[9px] font-bold text-blue-400">{totalCajas} caja(s)</p>
                                     </div>
                                     <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
@@ -701,7 +865,7 @@ export function IceCreamAssistantModal({
                     )}
 
                     {/* ════════ PASO 2 — CONFIGURAR PRODUCTO ════════ */}
-                    {mode === 'wizard' && step === 2 && (
+                    {mode === 'wizard' && camino === 'caja' && step === 2 && (
                         <>
                             {/* ─ Nombre con autocompletado ─ */}
                             <div className="relative">
@@ -734,6 +898,19 @@ export function IceCreamAssistantModal({
                                 )}
                             </div>
 
+                            <div className="space-y-2">
+                                <p className="text-base font-black text-slate-950">Onzas del vaso. No cambia los gramos ni el costo.</p>
+                                <div className="flex flex-wrap gap-2">
+                                    {ONZAS_VASO.map(oz => (
+                                        <button key={oz} type="button"
+                                            onClick={() => { setOnzaVaso(oz); if (!nombreBase.trim()) setNombreBase(`Copa ${oz} onzas`); }}
+                                            className={`h-12 px-4 rounded-xl font-black text-lg ${onzaVaso === oz ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-950'}`}>
+                                            {oz} oz
+                                        </button>
+                                    ))}
+                                </div>
+                                {onzaVaso && <p className="text-base font-bold text-emerald-800">Vaso de {onzaVaso} onzas. El costo sigue saliendo de los gramos de cada bola.</p>}
+                            </div>
                             {/* ─ Bolas de helado ─ */}
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between">
@@ -1008,7 +1185,7 @@ export function IceCreamAssistantModal({
                     )}
 
                     {/* ════════ PASO 3 — CONFIRMAR Y GUARDAR ════════ */}
-                    {mode === 'wizard' && step === 3 && (
+                    {mode === 'wizard' && camino === 'caja' && step === 3 && (
                         <>
                             <div className="bg-cyan-50 border border-cyan-200 rounded-xl p-3">
                                 <p className="text-xs font-black text-cyan-800">Confirma el producto antes de guardarlo en el catálogo</p>
@@ -1074,9 +1251,9 @@ export function IceCreamAssistantModal({
 
                 {/* ── Footer ─────────────────────────────────────────────── */}
                 <div className="p-4 border-t border-slate-100 flex gap-3 shrink-0 bg-white">
-                    {mode === 'history' ? (
+                    {mode === 'history' || camino === 'empaque' ? (
                         <Button variant="ghost" onClick={() => onOpenChange(false)}
-                            className="h-11 px-5 rounded-xl text-xs font-black uppercase text-slate-400 hover:text-slate-600">
+                            className="h-11 px-5 rounded-xl text-base font-black text-slate-950">
                             Cerrar
                         </Button>
                     ) : (

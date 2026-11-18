@@ -4,6 +4,7 @@
  */
 
 import { generateUUID } from '@/lib/safe-utils';
+import { subirEventoSeguridad, bajarEventosSeguridad, marcarLeidaNube, reintentarColaSeguridad } from '@/lib/seguridad-nube';
 import type { AlertaSeguridad, CuadreTurno, ConfigSeguridad, NivelAlerta, TipoAlerta, ExpedienteDeudor, IncidenteVendedor, LogActividad } from '@/types';
 
 const STORAGE_KEY_ALERTAS = 'dp_security_alertas';
@@ -36,6 +37,7 @@ export const CONFIG_SEGURIDAD_DEFAULT: ConfigSeguridad = {
   apiKeyCloud: '',
   ollamaUrl: 'http://localhost:11434',
   modeloOllamaTexto: 'llama3.2',
+  alertaRetiroDesde: 30000,
 };
 
 // ── Persistencia local ────────────────────────────────────────────
@@ -97,17 +99,91 @@ export function crearAlerta(
   };
   const actuales = getAlertas();
   saveAlertas([alerta, ...actuales]);
+  subirEventoSeguridad({
+    id: alerta.id, tipo: 'alerta', nivel: nivel, titulo, descripcion,
+    usuario: vendedora, payload: { tipoAlerta: tipo, datos: datos ?? {} }, fecha: alerta.fecha,
+  });
   return alerta;
 }
 
 export function marcarAlertaLeida(id: string): void {
   const alertas = getAlertas().map(a => a.id === id ? { ...a, leida: true } : a);
   saveAlertas(alertas);
+  marcarLeidaNube([id]);
 }
 
 export function marcarTodasLeidas(): void {
+  const pendientes = getAlertas().filter(a => !a.leida).map(a => a.id);
   const alertas = getAlertas().map(a => ({ ...a, leida: true }));
   saveAlertas(alertas);
+  marcarLeidaNube(pendientes);
+}
+
+const STORAGE_KEY_OCULTAS = 'dp_security_alertas_ocultas';
+
+function getAlertasOcultas(): string[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_OCULTAS);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+/** Quita alertas ya leídas de la vista de ESTE aparato. En la nube siguen guardadas. */
+export function ocultarAlertasLeidas(): AlertaSeguridad[] {
+  const alertas = getAlertas();
+  const ocultar = alertas.filter(a => a.leida).map(a => a.id);
+  const ocultas = [...getAlertasOcultas(), ...ocultar].slice(-2000);
+  localStorage.setItem(STORAGE_KEY_OCULTAS, JSON.stringify(ocultas));
+  const nuevas = alertas.filter(a => !a.leida);
+  saveAlertas(nuevas);
+  return nuevas;
+}
+
+/**
+ * Trae alertas, cuadres y logs de TODOS los aparatos (nube) y los mezcla con
+ * los locales por id. Así el dueño ve en su celular lo que pasó en la caja.
+ * Devuelve true si logró hablar con la nube.
+ */
+export async function sincronizarSeguridadDesdeNube(): Promise<boolean> {
+  await reintentarColaSeguridad().catch(() => {});
+  const eventos = await bajarEventosSeguridad();
+  if (eventos.length === 0) return false;
+
+  const alertas = getAlertas();
+  const idsAlertas = new Set([...alertas.map(a => a.id), ...getAlertasOcultas()]);
+  const leidasNube = new Set(eventos.filter(e => e.tipo === 'alerta' && e.leida).map(e => e.id));
+  const nuevasAlertas: AlertaSeguridad[] = eventos
+    .filter(e => e.tipo === 'alerta' && !idsAlertas.has(e.id))
+    .map(e => ({
+      id: e.id,
+      tipo: (e.payload?.tipoAlerta || 'faltante_caja') as TipoAlerta,
+      nivel: (e.nivel || 'media') as NivelAlerta,
+      titulo: e.titulo || 'Alerta',
+      descripcion: e.descripcion || '',
+      fecha: e.fecha,
+      vendedora: e.usuario || undefined,
+      leida: !!e.leida,
+      datos: e.payload?.datos,
+    }));
+  const mezcladas = [...nuevasAlertas, ...alertas.map(a => leidasNube.has(a.id) ? { ...a, leida: true } : a)]
+    .sort((a, b) => b.fecha.localeCompare(a.fecha));
+  saveAlertas(mezcladas);
+
+  const cuadres = getCuadres();
+  const idsCuadres = new Set(cuadres.map(c => c.id));
+  const nuevosCuadres = eventos
+    .filter(e => e.tipo === 'cuadre' && !idsCuadres.has(e.id) && e.payload?.cuadre)
+    .map(e => e.payload.cuadre as CuadreTurno);
+  saveCuadres([...nuevosCuadres, ...cuadres].sort((a, b) => b.fechaCierre.localeCompare(a.fechaCierre)));
+
+  const logs = getLogsActividad();
+  const idsLogs = new Set(logs.map(l => l.id));
+  const nuevosLogs = eventos
+    .filter(e => e.tipo === 'log' && !idsLogs.has(e.id) && e.payload?.log)
+    .map(e => e.payload.log as LogActividad);
+  saveLogsActividad([...nuevosLogs, ...logs].sort((a, b) => b.fecha.localeCompare(a.fecha)));
+
+  return true;
 }
 
 export function getAlertasNoLeidas(): number {
@@ -125,9 +201,12 @@ export function procesarCuadreTurno(params: {
   ventasNequi: number;
   ventasTransferencia: number;
   ventasCredito: number;
+  /** Entradas y retiros de efectivo hechos durante el turno (si no, el esperado sale mal). */
+  entradas?: number;
+  salidas?: number;
 }): CuadreTurno {
   const config = getConfigSeguridad();
-  const montoEsperado = params.montoApertura + params.ventasEfectivo;
+  const montoEsperado = params.montoApertura + params.ventasEfectivo + (params.entradas || 0) - (params.salidas || 0);
   const diferencia = params.montoDeclarado - montoEsperado;
   const totalVentas = params.ventasEfectivo + params.ventasNequi + params.ventasTransferencia + params.ventasCredito;
 
@@ -178,7 +257,51 @@ export function procesarCuadreTurno(params: {
 
   const cuadres = getCuadres();
   saveCuadres([cuadre, ...cuadres]);
+  subirEventoSeguridad({
+    id: cuadre.id, tipo: 'cuadre',
+    nivel: cuadre.alertaGenerada ? 'alta' : 'info',
+    titulo: `Cierre de caja — ${params.usuarioNombre}`,
+    descripcion: `Esperado $${montoEsperado.toLocaleString('es-CO')} · Declarado $${params.montoDeclarado.toLocaleString('es-CO')} · Diferencia $${diferencia.toLocaleString('es-CO')}`,
+    usuario: params.usuarioNombre, payload: { cuadre }, fecha: cuadre.fechaCierre,
+  });
   return cuadre;
+}
+
+// ── Vigilar entradas / retiros de efectivo ───────────────────────
+/** Todo movimiento queda en la bitácora; los retiros grandes o sin motivo además alertan. */
+export function vigilarMovimientoCaja(params: {
+  tipo: 'entrada' | 'salida';
+  monto: number;
+  motivo?: string;
+  usuarioId?: string;
+  usuarioNombre?: string;
+  cajaNombre?: string;
+}): void {
+  const config = getConfigSeguridad();
+  const quien = params.usuarioNombre || params.usuarioId || 'Desconocido';
+  const caja = params.cajaNombre || 'Caja';
+  const montoTxt = `$${Math.round(params.monto).toLocaleString('es-CO')}`;
+  const motivo = (params.motivo || '').trim();
+
+  registrarLogActividad(
+    params.usuarioId || 'desconocido', quien, caja,
+    params.tipo === 'salida' ? 'retiro_caja' : 'entrada_caja',
+    `${params.tipo === 'salida' ? 'Retiro' : 'Entrada'} de ${montoTxt}${motivo ? ` — ${motivo}` : ' — SIN MOTIVO'}`
+  );
+
+  if (!config.activado || params.tipo !== 'salida') return;
+  const umbral = config.alertaRetiroDesde ?? CONFIG_SEGURIDAD_DEFAULT.alertaRetiroDesde ?? 30000;
+  const sinMotivo = motivo.length < 3;
+  if (params.monto >= umbral || sinMotivo) {
+    crearAlerta(
+      'actividad_sospechosa',
+      params.monto >= umbral * 3 ? 'alta' : 'media',
+      `💸 Retiro de caja ${montoTxt} — ${quien}`,
+      `${quien} sacó ${montoTxt} de ${caja}. Motivo: ${motivo || 'NO ESCRIBIÓ MOTIVO'}. Verifica que el retiro esté autorizado.`,
+      quien,
+      { monto: params.monto, motivo, caja }
+    );
+  }
 }
 
 // ── Analizar venta antes de guardar ──────────────────────────────
@@ -392,6 +515,14 @@ export function registrarLogActividad(
   };
   const todos = getLogsActividad();
   saveLogsActividad([nuevo, ...todos]);
+
+  // Las simples visitas a módulos no se suben (mucho ruido); todo lo demás sí.
+  if (accion !== 'visita_modulo') {
+    subirEventoSeguridad({
+      id: nuevo.id, tipo: 'log', nivel: 'info', titulo: `${pantalla}: ${accion}`,
+      descripcion: detalles, usuario: usuarioNombre, payload: { log: nuevo }, fecha: nuevo.fecha,
+    });
+  }
 
   // Si es una acción crítica, evaluar posibles fraudes
   if (accion.includes('cancelar_orden') || accion.includes('eliminar_item')) {

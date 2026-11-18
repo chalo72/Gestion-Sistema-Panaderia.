@@ -215,7 +215,7 @@ export class SupabaseDatabase implements IDatabase {
             id: `${table}:${id}`,
             table: table,
             item_id: id,
-            fecha: new Date().toISOString()
+            deleted_at: new Date().toISOString()
         });
         if (error) console.error(`❌ Error al crear lápida en Supabase (${table}:${id}):`, error);
     }
@@ -446,8 +446,10 @@ export class SupabaseDatabase implements IDatabase {
             unidades: data.unidades || data.metadata?.unidades || [],
             destinos: data.destinos || data.metadata?.destinos || [],
             latasPorHorno: data.metadata?.latasPorHorno,
-            pesoArrobaKg: data.metadata?.pesoArrobaKg
-        };
+            pesoArrobaKg: data.metadata?.pesoArrobaKg,
+            updatedAt: data.metadata?.updated_at ?? data.updated_at,
+            updated_at: data.metadata?.updated_at ?? data.updated_at
+        } as any;
     }
 
     async getAllConfiguraciones(): Promise<any[]> {
@@ -457,28 +459,30 @@ export class SupabaseDatabase implements IDatabase {
     }
 
     async saveConfiguracion(config: DBConfiguracion): Promise<void> {
+        const anyConfig = config as any;
         const dbConfig = {
             id: 'main',
-            nombre_negocio: config.nombreNegocio,
-            direccion_negocio: config.direccionNegocio,
-            telefono_negocio: config.telefonoNegocio,
-            email_negocio: config.emailNegocio,
+            nombre_negocio: config.nombreNegocio ?? anyConfig.nombre_negocio,
+            direccion_negocio: config.direccionNegocio ?? anyConfig.direccion_negocio,
+            telefono_negocio: config.telefonoNegocio ?? anyConfig.telefono_negocio,
+            email_negocio: config.emailNegocio ?? anyConfig.email_negocio,
             moneda: config.moneda,
-            margen_utilidad_default: config.margenUtilidadDefault,
-            impuesto_porcentaje: config.impuestoPorcentaje,
-            umbral_alerta: config.umbralAlerta,
-            ajuste_automatico: config.ajusteAutomatico,
-            notificar_subidas: config.notificarSubidas,
-            mostrar_utilidad_en_lista: config.mostrarUtilidadEnLista,
+            margen_utilidad_default: config.margenUtilidadDefault ?? anyConfig.margen_utilidad_default,
+            impuesto_porcentaje: config.impuestoPorcentaje ?? anyConfig.impuesto_porcentaje,
+            umbral_alerta: config.umbralAlerta ?? anyConfig.umbral_alerta,
+            ajuste_automatico: config.ajusteAutomatico ?? anyConfig.ajuste_automatico,
+            notificar_subidas: config.notificarSubidas ?? anyConfig.notificar_subidas,
+            mostrar_utilidad_en_lista: config.mostrarUtilidadEnLista ?? anyConfig.mostrar_utilidad_en_lista,
             categorias: config.categorias,
-            unidades: (config as any).unidades || [],
-            destinos: (config as any).destinos || [],
+            unidades: anyConfig.unidades || [],
+            destinos: anyConfig.destinos || [],
             metadata: {
-              ...(config as any).metadata,
-              unidades: (config as any).unidades,
-              destinos: (config as any).destinos,
-              latasPorHorno: config.latasPorHorno,
-              pesoArrobaKg: config.pesoArrobaKg
+              ...anyConfig.metadata,
+              unidades: anyConfig.unidades,
+              destinos: anyConfig.destinos,
+              latasPorHorno: anyConfig.latasPorHorno,
+              pesoArrobaKg: anyConfig.pesoArrobaKg,
+              updated_at: anyConfig.updatedAt ?? anyConfig.updated_at ?? new Date().toISOString()
             }
         };
         const { error } = await supabase.from('configuracion').upsert(dbConfig);
@@ -609,6 +613,12 @@ export class SupabaseDatabase implements IDatabase {
         if (error) throw error;
     }
 
+    // Fix 2026-09-30 (AUTORIZO Gonzalo): faltaba — borrar una recepción no llegaba a la nube.
+    async deleteRecepcion(id: string): Promise<void> {
+        const { error } = await supabase.from('recepciones').delete().eq('id', id);
+        if (error) throw error;
+    }
+
 
     // --- Historial ---
     async getAllHistorial(): Promise<DBHistorialPrecio[]> {
@@ -669,9 +679,21 @@ export class SupabaseDatabase implements IDatabase {
 
     // --- Caja ---
     async getAllSesionesCaja(): Promise<DBCajaSesion[]> {
-        const { data, error } = await supabase.from('caja').select('*');
-        if (error) throw error;
-        return data.map(this.mapCajaFromDB);
+        // PostgREST corta en 1000 filas. Sin páginas, al pasar de eso se pierden días enteros.
+        const page = 1000;
+        const all: any[] = [];
+        for (let from = 0; from < 20000; from += page) {
+            const { data, error } = await supabase
+                .from('caja')
+                .select('*')
+                .order('fecha_apertura', { ascending: true })
+                .range(from, from + page - 1);
+            if (error) throw error;
+            const rows = data || [];
+            all.push(...rows);
+            if (rows.length < page) break;
+        }
+        return all.map(c => this.mapCajaFromDB(c));
     }
 
     async getSesionCajaActiva(): Promise<DBCajaSesion | undefined> {
@@ -796,11 +818,13 @@ export class SupabaseDatabase implements IDatabase {
                 monto: g.monto,
                 categoria: g.categoria,
                 fecha: g.fecha,
-                proveedorId: g.proveedor_id,
+                proveedorId: g.proveedor_id ?? meta.proveedorId,
                 comprobanteUrl: g.comprobante_url,
                 metodoPago: g.metodo_pago,
                 usuarioId: g.usuario_id,
-                cajaId: g.caja_id,
+                // 🩹 2026-10-09: el nombre de la caja POS (no es uuid) viaja en metadata
+                cajaId: g.caja_id ?? meta.cajaId,
+                personaFamilia: meta.personaFamilia || g.persona_familia,
                 metadata: meta
             };
         });
@@ -809,26 +833,45 @@ export class SupabaseDatabase implements IDatabase {
         const {
             id, descripcion, monto, categoria, fecha, proveedorId,
             comprobanteUrl, metodoPago, usuarioId, cajaId, metadata,
+            personaFamilia,
             proveedor_id, comprobante_url, metodo_pago, usuario_id, caja_id, // ignore db keys if present
             ...rest
         } = gasto;
         
-        await supabase.from('gastos').upsert({
+        // 🩹 FIX 2026-10-09: las columnas caja_id y proveedor_id de Supabase son tipo uuid.
+        // La app guarda en cajaId el NOMBRE de la caja POS ("Principal", "Helados"...), y
+        // Supabase rechazaba TODO el gasto (error 400, ~228/día) → los gastos nunca llegaban
+        // a la nube. Ahora: si no es uuid, va a null y el valor real se guarda en metadata.
+        const esUuid = (v: unknown) =>
+            typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+        const extraMeta: Record<string, unknown> = {};
+        if (cajaId && !esUuid(cajaId)) extraMeta.cajaId = cajaId;
+        if (proveedorId && !esUuid(proveedorId)) extraMeta.proveedorId = proveedorId;
+
+        const { error } = await supabase.from('gastos').upsert({
             id: gasto.id,
             descripcion: gasto.descripcion,
             monto: gasto.monto,
             categoria: gasto.categoria,
             fecha: gasto.fecha,
-            proveedor_id: gasto.proveedorId,
+            proveedor_id: esUuid(proveedorId) ? proveedorId : null,
             comprobante_url: gasto.comprobanteUrl,
             metodo_pago: gasto.metodoPago,
             usuario_id: gasto.usuarioId,
-            caja_id: gasto.cajaId,
+            caja_id: esUuid(cajaId) ? cajaId : null,
             metadata: {
                 ...(metadata || {}),
-                ...rest
+                ...rest,
+                ...extraMeta,
+                ...(personaFamilia ? { personaFamilia } : {}),
             }
         });
+        // Antes el error se ignoraba en silencio; ahora se lanza para que el puente
+        // lo deje en la cola de reintento y quede registro en la consola.
+        if (error) {
+            console.warn('⚠️ [supabase-db] addGasto falló:', error.message);
+            throw error;
+        }
     }
     async updateGasto(gasto: any): Promise<void> {
         await this.addGasto(gasto);
@@ -841,32 +884,40 @@ export class SupabaseDatabase implements IDatabase {
     async getAllTrabajadores(): Promise<any[]> {
         const { data, error } = await supabase.from('trabajadores').select('*');
         if (error) return [];
-        return data.map((t: any) => ({
-            id: t.id,
-            nombre: t.nombre,
-            cargo: t.cargo,
-            telefono: t.telefono,
-            documento: t.documento,
-            salario: t.salario,
-            fechaIngreso: t.fecha_ingreso,
-            estado: t.estado,
-            horario: t.horario,
-            notas: t.notas,
-        }));
+        const ROLES = ['panadero', 'vendedor', 'cajero', 'repartidor', 'administrador', 'otro'];
+        return data.map((t: any) => {
+            const cargo = String(t.cargo ?? '').trim().toLowerCase();
+            const ingreso = typeof t.fecha_ingreso === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(t.fecha_ingreso)
+                ? t.fecha_ingreso.slice(0, 10)
+                : t.fecha_ingreso;
+            return {
+                id: t.id,
+                nombre: t.nombre,
+                cedula: t.documento ?? undefined,
+                telefono: t.telefono ?? undefined,
+                rol: ROLES.includes(cargo) ? cargo : 'otro',
+                salarioBase: Number(t.salario) || 0,
+                fechaIngreso: ingreso,
+                estado: t.estado,
+                horario: t.turno ?? undefined,
+                observaciones: t.notas ?? undefined,
+            };
+        });
     }
     async addTrabajador(t: any): Promise<void> {
-        await supabase.from('trabajadores').upsert({
+        const { error } = await supabase.from('trabajadores').upsert({
             id: t.id,
             nombre: t.nombre,
-            cargo: t.cargo,
-            telefono: t.telefono,
-            documento: t.documento,
-            salario: t.salario,
-            fecha_ingreso: t.fechaIngreso,
+            cargo: t.rol ?? t.cargo ?? null,
+            telefono: t.telefono ?? null,
+            documento: t.cedula ?? t.documento ?? null,
+            salario: t.salarioBase ?? t.salario ?? 0,
+            fecha_ingreso: t.fechaIngreso || null,
             estado: t.estado,
-            horario: t.horario,
-            notas: t.notas,
+            turno: t.horario ?? t.turno ?? null,
+            notas: t.observaciones ?? t.notas ?? null,
         });
+        if (error) console.warn('⚠️ [supabase-db] addTrabajador falló:', error.message);
     }
     async updateTrabajador(t: any): Promise<void> {
         await this.addTrabajador(t);
@@ -875,30 +926,120 @@ export class SupabaseDatabase implements IDatabase {
         await supabase.from('trabajadores').delete().eq('id', id);
     }
 
-    // --- Créditos Trabajadores ---
-    async getAllCreditosTrabajadores(): Promise<any[]> {
-        const { data, error } = await supabase.from('creditos_trabajadores').select('*');
+    // --- Checklist Completadas ---
+    async getAllChecklistCompletadas(): Promise<any[]> {
+        const { data, error } = await supabase.from('checklist_completadas').select('*');
         if (error) return [];
         return data.map((c: any) => ({
             id: c.id,
-            trabajadorId: c.trabajador_id,
-            monto: c.monto,
-            tipo: c.tipo,
-            descripcion: c.descripcion,
+            tareaId: c.tarea_id,
+            usuarioId: c.usuario_id,
+            usuarioNombre: c.usuario_nombre,
             fecha: c.fecha,
-            estado: c.estado,
         }));
     }
+    async addChecklistCompletada(c: any): Promise<void> {
+        await supabase.from('checklist_completadas').upsert({
+            id: c.id,
+            tarea_id: c.tareaId,
+            usuario_id: c.usuarioId,
+            usuario_nombre: c.usuarioNombre,
+            fecha: c.fecha,
+        });
+    }
+    async deleteChecklistCompletada(id: string): Promise<void> {
+        await supabase.from('checklist_completadas').delete().eq('id', id);
+    }
+
+    // --- Asistencias ---
+    async getAllAsistencias(): Promise<any[]> {
+        const { data, error } = await supabase.from('asistencias').select('*');
+        if (error) return [];
+        return data.map((a: any) => ({
+            id: a.id,
+            trabajadorId: a.usuario_id,
+            trabajadorNombre: a.usuario_nombre,
+            tipo: a.tipo,
+            fecha: a.fecha,
+            hora: a.timestamp ? new Date(a.timestamp).toISOString().slice(11, 16) : '',
+            createdAt: a.timestamp,
+        }));
+    }
+    async addAsistencia(a: any): Promise<void> {
+        await supabase.from('asistencias').upsert({
+            id: a.id,
+            usuario_id: a.trabajadorId,
+            usuario_nombre: a.trabajadorNombre,
+            tipo: a.tipo,
+            fecha: a.fecha,
+            timestamp: a.createdAt || new Date().toISOString(),
+        });
+    }
+
+    // --- Créditos Trabajadores ---
+    // Sin foto_evidencia (2026-11-16): las fotos pesaban casi 10 MB y cada aparato las bajaba
+    // en cada sincronización. La foto se trae solo al tocarla (foto-credito-nube.ts).
+    static readonly COLUMNAS_CREDITO_TRABAJADOR =
+        'id, trabajador_id, trabajador_nombre, trabajador_rol, monto, saldo, tipo, descripcion, fecha, ' +
+        'fecha_vencimiento, estado, items, pagos, descontar_de_salario, usuario_id, created_at, updated_at, tiene_foto';
+
+    async getAllCreditosTrabajadores(): Promise<any[]> {
+        const { data, error } = await supabase.from('creditos_trabajadores').select(SupabaseDatabase.COLUMNAS_CREDITO_TRABAJADOR);
+        // Lanza el error: devolver [] hacía creer que la nube estaba vacía y se volvía a subir todo.
+        if (error) throw error;
+        return (data ?? []).map((c: any) => this.mapCreditoTrabajadorFromDB(c));
+    }
+
+    public mapCreditoTrabajadorFromDB(c: any): any {
+            const fechaMs = c.fecha ? new Date(c.fecha).getTime() : NaN;
+            return {
+                id: c.id,
+                trabajadorId: c.trabajador_id,
+                trabajadorNombre: c.trabajador_nombre ?? '',
+                trabajadorRol: c.trabajador_rol ?? undefined,
+                monto: Number(c.monto) || 0,
+                saldo: c.saldo === null || c.saldo === undefined ? (Number(c.monto) || 0) : Number(c.saldo),
+                tipo: c.tipo || 'consumo',
+                descripcion: c.descripcion ?? '',
+                fecha: Number.isNaN(fechaMs) ? c.fecha : new Date(fechaMs).toISOString(),
+                fechaVencimiento: c.fecha_vencimiento ?? undefined,
+                estado: c.estado,
+                items: Array.isArray(c.items) ? c.items : [],
+                pagos: Array.isArray(c.pagos) ? c.pagos : [],
+                ...(c.foto_evidencia ? { fotoEvidencia: c.foto_evidencia } : {}),
+                ...(c.tiene_foto !== undefined ? { tieneFoto: c.tiene_foto === true } : {}),
+                descontarDeSalario: c.descontar_de_salario !== false,
+                usuarioId: c.usuario_id ?? undefined,
+                ...(c.created_at ? { createdAt: new Date(c.created_at).toISOString() } : {}),
+                ...(c.updated_at ? { updatedAt: new Date(c.updated_at).toISOString() } : {}),
+            };
+    }
     async addCreditoTrabajador(c: any): Promise<void> {
-        await supabase.from('creditos_trabajadores').upsert({
+        const { error } = await supabase.from('creditos_trabajadores').upsert({
             id: c.id,
             trabajador_id: c.trabajadorId,
+            trabajador_nombre: c.trabajadorNombre ?? null,
+            trabajador_rol: c.trabajadorRol ?? null,
             monto: c.monto,
-            tipo: c.tipo,
+            saldo: c.saldo ?? c.monto ?? 0,
+            tipo: c.tipo || 'consumo',
             descripcion: c.descripcion,
             fecha: c.fecha,
+            fecha_vencimiento: c.fechaVencimiento ?? null,
             estado: c.estado,
+            items: c.items ?? [],
+            pagos: c.pagos ?? [],
+            // La foto solo se manda si este aparato la tiene: la lista ya no la descarga y
+            // mandar null borraría en la nube la foto subida desde otro aparato.
+            ...(c.fotoEvidencia ? { foto_evidencia: c.fotoEvidencia } : {}),
+            descontar_de_salario: c.descontarDeSalario !== false,
+            usuario_id: c.usuarioId ?? null,
+            created_at: c.createdAt ?? c.fecha ?? new Date().toISOString(),
+            updated_at: c.updatedAt ?? new Date().toISOString(),
         });
+        // Lanza el error para que el registro quede en la cola y se reintente (antes solo
+        // avisaba en consola y el consumo se quedaba para siempre en ese aparato).
+        if (error) throw new Error(`addCreditoTrabajador: ${error.message}`);
     }
     async updateCreditoTrabajador(c: any): Promise<void> {
         await this.addCreditoTrabajador(c);
@@ -1089,30 +1230,58 @@ export class SupabaseDatabase implements IDatabase {
     }
 
     // --- Créditos Clientes ---
+    // 2026-11-16: antes devolvía las filas crudas (snake_case) y la app las guardaba así;
+    // y el guardado fallaba siempre porque la tabla tenía otro formato (ver migración
+    // 20261116190000_creditos_clientes_formato_app.sql). Ahora se traduce en ambos sentidos.
     async getAllCreditosClientes(): Promise<any[]> {
         const { data, error } = await supabase.from('creditos').select('*');
         if (error) return [];
-        return data;
+        return (data || []).map((r: any) => this.mapCreditoClienteFromDB(r));
+    }
+    public mapCreditoClienteFromDB(r: any): any {
+        return {
+            id: r.id,
+            clienteId: r.cliente_id ?? undefined,
+            clienteNombre: r.cliente_nombre ?? '',
+            clienteTelefono: r.cliente_telefono ?? undefined,
+            categoriaCliente: r.categoria_cliente ?? undefined,
+            monto: Number(r.monto ?? r.monto_total ?? 0),
+            saldo: Number(r.saldo ?? r.saldo_pendiente ?? 0),
+            descripcion: r.descripcion ?? '',
+            fecha: r.fecha ?? (r.created_at ? String(r.created_at).split('T')[0] : ''),
+            fechaVencimiento: r.fecha_vencimiento ?? undefined,
+            estado: r.estado === 'pendiente' || r.estado === 'parcial' ? 'activo' : (r.estado ?? 'activo'),
+            items: Array.isArray(r.items) ? r.items : [],
+            fotoEvidencia: r.foto_evidencia ?? undefined,
+            pagos: Array.isArray(r.pagos) ? r.pagos : (Array.isArray(r.abonos) ? r.abonos : []),
+            usuarioId: r.usuario_id ?? '',
+            createdAt: r.created_at,
+            updatedAt: r.updated_at ?? r.created_at,
+        };
     }
     async addCreditoCliente(c: any): Promise<void> {
-        // Detectar si viene en formato local (camelCase) y convertir a snake_case
+        const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        // Formato local (camelCase) → columnas de la nube. Si ya viene en snake_case, se manda igual.
         const row = c.clienteNombre !== undefined ? {
             id: c.id,
-            cliente_id: c.clienteId ?? null,
+            cliente_id: c.clienteId && UUID.test(c.clienteId) ? c.clienteId : null,
             cliente_nombre: c.clienteNombre,
-            cliente_telefono: c.clienteTelefono ?? null,
+            cliente_telefono: c.clienteTelefono || null,
             categoria_cliente: c.categoriaCliente ?? null,
-            monto: c.monto,
-            saldo: c.saldo,
-            descripcion: c.descripcion,
-            fecha: c.fecha,
-            fecha_vencimiento: c.fechaVencimiento ?? null,
-            estado: c.estado,
+            monto: safeN(c.monto),
+            saldo: safeN(c.saldo),
+            monto_total: safeN(c.monto),
+            saldo_pendiente: safeN(c.saldo),
+            descripcion: c.descripcion ?? '',
+            fecha: c.fecha ?? null,
+            fecha_vencimiento: c.fechaVencimiento || null,
+            estado: c.estado ?? 'activo',
             items: c.items ?? [],
             foto_evidencia: c.fotoEvidencia ?? null,
             pagos: c.pagos ?? [],
             usuario_id: c.usuarioId ?? null,
             created_at: c.createdAt ?? new Date().toISOString(),
+            updated_at: c.updatedAt ?? new Date().toISOString(),
         } : c; // ya está en snake_case (vino de Supabase)
         const { error } = await supabase.from('creditos').upsert(row);
         if (error) throw error;
@@ -1147,6 +1316,7 @@ export class SupabaseDatabase implements IDatabase {
             telefono: c.telefono ?? null,
             tipo: c.tipo ?? 'mayorista',
             direccion: c.direccion ?? null,
+            enConsumo: c.en_consumo === true,
             createdAt: c.created_at,
             updatedAt: c.updated_at,
         };
@@ -1158,7 +1328,10 @@ export class SupabaseDatabase implements IDatabase {
             telefono: c.telefono ?? null,
             tipo: c.tipo ?? 'mayorista',
             direccion: c.direccion ?? null,
-            updated_at: new Date().toISOString(),
+            // Solo se manda si el aparato conoce el dato (un aparato viejo sin el campo no lo apaga)
+            ...(typeof c.enConsumo === 'boolean' ? { en_consumo: c.enConsumo } : {}),
+            // Fecha real del último cambio (antes siempre "ahora": la nube parecía siempre más nueva)
+            updated_at: c.updatedAt ?? new Date().toISOString(),
             created_at: c.createdAt ?? c.created_at ?? new Date().toISOString(),
         };
     }
@@ -1174,9 +1347,13 @@ export class SupabaseDatabase implements IDatabase {
             margenUtilidad: p.margen_utilidad,
             tipo: p.tipo || 'elaborado',
             costoBase: p.costo_base || 0,
+            // Mayoreo / pan de empaque (sincroniza celular y PC)
+            descuentoMayorista: p.descuento_mayorista ?? undefined,
+            comisionRepartidor: p.comision_repartidor ?? undefined,
+            unidadesPaquete: p.unidades_paquete ?? undefined,
             createdAt: p.created_at,
             updatedAt: p.updated_at
-        };
+        } as any;
     }
 
     private mapProductoToDB(p: DBProducto): any {
@@ -1189,6 +1366,10 @@ export class SupabaseDatabase implements IDatabase {
             margen_utilidad: safeN(p.margenUtilidad),
             tipo: p.tipo,
             costo_base: safeN(p.costoBase),
+            // Solo se envían si existen, para no borrar el % desde un aparato con datos viejos
+            ...((p as any).descuentoMayorista !== undefined ? { descuento_mayorista: safeN((p as any).descuentoMayorista) } : {}),
+            ...((p as any).comisionRepartidor !== undefined ? { comision_repartidor: safeN((p as any).comisionRepartidor) } : {}),
+            ...((p as any).unidadesPaquete !== undefined ? { unidades_paquete: Math.round(safeN((p as any).unidadesPaquete)) } : {}),
             created_at: p.createdAt,
             updated_at: p.updatedAt
         };
@@ -1251,7 +1432,13 @@ export class SupabaseDatabase implements IDatabase {
     }
 
     private mapCajaFromDB(c: any): DBCajaSesion {
+        // Versión publicada (oct-nov) guardaba los nombres dentro de arqueo_por_caja: se usan de respaldo.
+        const a = (c.arqueo_por_caja && typeof c.arqueo_por_caja === 'object') ? c.arqueo_por_caja : {};
         return {
+            ...(a.cajaNombre ? { cajaNombre: a.cajaNombre } : {}),
+            ...(a.turno ? { turno: a.turno } : {}),
+            ...(a.vendedoraNombre ? { vendedoraNombre: a.vendedoraNombre } : {}),
+            ...(a.eventoEspecial ? { eventoEspecial: a.eventoEspecial } : {}),
             id: c.id,
             usuarioId: c.usuario_id,
             fechaApertura: c.fecha_apertura,
@@ -1293,6 +1480,15 @@ export class SupabaseDatabase implements IDatabase {
             ...(x.vendedoraNombre ? { vendedora_nombre: x.vendedoraNombre } : {}),
             ...(x.eventoEspecial ? { evento_especial: x.eventoEspecial } : {}),
             ...(Array.isArray(x.movimientos) && x.movimientos.length > 0 ? { movimientos: x.movimientos } : {}),
+            // También en arqueo_por_caja, que es donde los aparatos con la versión anterior lo leen.
+            ...((x.cajaNombre || x.vendedoraNombre || x.turno || x.eventoEspecial) ? {
+                arqueo_por_caja: {
+                    cajaNombre: x.cajaNombre,
+                    vendedoraNombre: x.vendedoraNombre,
+                    turno: x.turno,
+                    eventoEspecial: x.eventoEspecial,
+                },
+            } : {}),
         };
     }
 

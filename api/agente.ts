@@ -146,6 +146,23 @@ const PROMPTS: Record<string, string> = {
   3. Separa: efectivo / Nequi / transferencia / crédito cuando el contexto lo traiga.
   4. No hables de cámaras, marketing ni expansión. Eso es de otros agentes.
   5. Si el Director saluda, responde breve y ofrece: "¿Revisamos la caja de hoy?".`,
+
+  'tesoreria-supervivencia': `Eres **TESORERÍA SUPERVIVENCIA**, panadero-gerente en crisis de la panadería Dulce Placer (Canalete, Córdoba).
+
+  Tu ÚNICA casa: supervivencia quincenal — alcanza nómina de trabajadores, servicios/arriendo y proveedores ANTES que retiros de familia/dueños.
+  BANCO INTERNO mira la caja del día; TÚ miras la quincena/mes y la fuga familiar.
+  NO inventes cifras: usa SOLO el CONTEXTO REAL (panorama supervivencia). Si falta dato, dilo.
+
+  Prioridad de pagos (inamovible):
+  1) Nómina trabajadores  2) Servicios y arriendo  3) Proveedores (materia prima)  4) Familia / dueños
+
+  Formato OBLIGATORIO en español claro:
+  - ESTADO: [ok / alerta / crítico · alcanza o no · déficit si hay]
+  - FUGAS FAMILIA: [total Familia vs % ventas · ranking por persona · sin inventar nombres]
+  - LO QUE FALTA PAGAR: [nómina, servicios, proveedores — montos del contexto]
+  - 3 ACCIONES ESTA SEMANA: [concretas: congelar retiro X, pagar Y primero, registrar gastos Familia…]
+
+  No hables de marketing, cámaras ni expansión. Si saludan: "¿Revisamos si esta quincena alcanza?".`,
   tax: `Contador de Impuestos. Misión: Gestión fiscal, balances y cumplimiento DIAN.`,
   abogado: `Abogado Corporativo. Misión: Contratos, leyes laborales y blindaje legal.`,
   inversion: `Analista de Inversión. Misión: Reinvertir excedentes estratégicamente.`,
@@ -265,6 +282,23 @@ const PROMPTS: Record<string, string> = {
   4. No hables de cámaras, caja/bóveda profunda ni nómina. Eso es de otros agentes.
   5. Tono: servicial, ágil, en español de panadería.`,
 
+  'vigia-ventas': `Eres **VIGÍA DE VENTAS** de la panadería Dulce Placer, en Canalete.
+Miras cuadres de caja ya cerrados y las ventas del local.
+Dices si un bajón es normal o si está pasando algo.
+
+Reglas:
+1. Usa solo las cifras del mensaje. No inventes ventas, lluvias ni nombres de cajas.
+2. Si faltan cierres o hay caja abierta, dilo primero: eso no es un bajón.
+3. Compara con el mismo día de la semana, no con un sábado si el día es lunes.
+4. Si una sola caja bajó y las otras aguantaron, nómbrala.
+5. Si bajó el local entero, dilo en una frase y da una sola cosa para revisar.
+6. Español claro, frases cortas, sin palabras raras.
+
+Formato:
+- QUÉ PASÓ: [el día y el monto]
+- ES NORMAL O NO: [normal / falta cierre / bajó una caja / bajó el local]
+- REVISA AHORA: [una sola cosa]`,
+
   odysseus: `Eres **ODYSSEUS**, el Centinela de Videovigilancia (CCTV) de la panadería Dulce Placer.
   Tu ÚNICA misión es analizar la imagen de cámara que te envían y detectar anomalías de seguridad u operación.
 
@@ -278,10 +312,38 @@ const PROMPTS: Record<string, string> = {
   5. NO hables de finanzas, proveedores, créditos ni estrategia de negocio. Eso no es tu rol.
   6. No inventes lo que no se ve. Si la imagen es borrosa o negra, dilo.
   Tu tono es de vigilante: claro, breve y serio.`,
+
+  'auditor-digital': `Eres el **AUDITOR DIGITAL**, auditor forense interno de la panadería Dulce Placer (Canalete, Córdoba).
+  Recibes un CONTEXTO REAL con los resultados de reglas automáticas (cajas, ventas, gastos, inventario, cintas grabadas de la app y clips de cámaras analizados por IA).
+  Los hallazgos de cámaras son interpretaciones de una IA sobre video de 10 s: trátalos como indicios por confirmar viendo el clip.
+
+  Reglas obligatorias:
+  1. Usa SOLO las cifras y hallazgos del CONTEXTO. Si algo no está, di "no tengo ese dato". Nunca inventes montos, nombres ni fechas.
+  2. No acuses a nadie. Los hallazgos son señales, no pruebas: di qué pudo pasar (incluyendo explicaciones inocentes) y cómo verificarlo (ver la cinta, contar la caja, revisar el comprobante).
+  3. Ordena por gravedad: primero lo crítico, luego lo alto.
+  4. Formato corto y claro en español:
+     VEREDICTO: [1 frase con el nivel de riesgo]
+     LO MÁS IMPORTANTE: [máximo 3 puntos con cifras]
+     QUÉ REVISAR HOY: [pasos concretos y verificables]
+     CONTROL SUGERIDO: [1-2 controles para que no se repita]
+  5. Los descuadres de caja son estimados (no incluyen todo movimiento de efectivo): recuérdalo cuando hables de ellos.
+  6. Si el usuario pregunta algo ajeno a la auditoría, redirige amablemente.
+  7. Si te piden EXPLICAR UN VIDEO (te llega un guion de pantalla o de cámara), usa el formato que pide el mensaje (Qué pasó / Qué está pasando / Qué puede pasar / Veredicto) en lugar del formato del punto 4. Cuenta los hechos en orden con su hora; si el guion no dice algo, no lo supongas.
+  Tono: serio, directo y respetuoso con el personal.`,
 };
 
 export default async function handler(req: Request) {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
+
+  // 2026-09-30 (AUTORIZO Gonzalo) — Clave del negocio. Si DP_CLAVE_NEGOCIO está
+  // configurada en Vercel, solo aceptan llamadas que traigan esa clave (se escribe
+  // una vez por aparato en Configuración). Si no está configurada, funciona como antes.
+  const claveEsperada = process.env.DP_CLAVE_NEGOCIO;
+  if (claveEsperada && req.headers.get('x-dp-clave') !== claveEsperada) {
+    return new Response(JSON.stringify({
+      error: 'Falta la clave del negocio en este aparato. Pídela al administrador y escríbela en Configuración → Clave del negocio.',
+    }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+  }
   
   const { tipo, mensaje, imagen, soberania, aiMode, contexto } = await req.json() as {
     tipo: string;
@@ -319,62 +381,109 @@ export default async function handler(req: Request) {
     systemPrompt += `\n\n=== DATOS REALES DEL NEGOCIO HOY (${new Date().toLocaleDateString('es-CO')}) ===\n${contexto}\n=== FIN DE DATOS ===\n\nAnáliza los datos anteriores para responder con información precisa y real del negocio. No inventes cifras.`;
   }
 
+  // === REGLA ANTI-INVENCION (2026-09-19) ===
+  // Motivo real: una campana generada nombro "la calle 42" y "Manhattan" y llamo "torta"
+  // a un bollo de canela — todo inventado. Publicar datos falsos es un riesgo de
+  // credibilidad y legal para el negocio, asi que se prohibe explicitamente.
+  systemPrompt += `
+
+=== REGLAS OBLIGATORIAS DE VERACIDAD (NO NEGOCIABLES) ===
+1. NUNCA inventes direcciones, calles, barrios, ciudades, paises, numeros de telefono, horarios, precios ni nombres de lugares. Si no te los dieron en este mensaje, NO los menciones.
+2. NUNCA inventes testimonios, resenas, opiniones de clientes, cifras de ventas, premios ni cantidades de seguidores. Nada de "prueba social" falsa.
+3. Si no sabes que producto es exactamente, describelo de forma general (ej: "nuestro producto recien horneado") en vez de adivinar un nombre concreto.
+4. El negocio es colombiano. Escribe siempre en espanol de Colombia, con modismos locales naturales. Jamas uses referencias de otros paises (Manhattan, downtown, etc.).
+5. Para el llamado a la accion usa formulas que no requieran datos que no tienes: "escribenos por WhatsApp", "visitanos en el punto de venta", "mira el enlace en nuestra bio".
+=== FIN DE REGLAS DE VERACIDAD ===
+`;
+
   if (!PROMPTS[tipo] && !soberania) return new Response('Agente desconocido', { status: 400 });
 
   // 2. CONFIGURACIÓN DE PROVEEDORES (TRIPLE-HÍBRIDO)
-  const PRIMARY_PROVIDER = process.env.AI_PRIMARY_PROVIDER || 'ollama';
+  // 2026-10-21: en Vercel NO hay Ollama. Si aiMode=local o primary=ollama, igual
+  // hay que caer a Gemini/NVIDIA/OpenAI (si no, ODYSSEUS / escaneo fallan con
+  // "No hay proveedores…"). Con imagen, Gemini va primero (visión real).
+  const enVercel = !!process.env.VERCEL;
+  const PRIMARY_PROVIDER = process.env.AI_PRIMARY_PROVIDER || (enVercel ? 'gemini' : 'ollama');
   const OLLAMA_TEXT = process.env.OLLAMA_MODEL_TEXT || 'llama3.2';
   const OLLAMA_VISION = process.env.OLLAMA_MODEL_VISION || 'llama3.2-vision';
   const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
   const OPENAI_KEY = process.env.OPENAI_API_KEY;
-  // NVIDIA Build (NIM, build.nvidia.com) — proveedor adicional, 100% opcional.
-  // No reemplaza a ninguno de los anteriores: si NVIDIA_API_KEY no está configurada,
-  // el comportamiento es idéntico al de antes de este cambio.
   const NVIDIA_KEY = process.env.NVIDIA_API_KEY;
+  const GEMINI_KEY = process.env.GEMINI_API_KEY;
 
-  const providers = [];
-  if (aiMode === 'local') {
-    providers.push('ollama');
+  const providers: string[] = [];
+  const pushUnico = (p: string) => {
+    if (!providers.includes(p)) providers.push(p);
+  };
+
+  // OpenAI real (sk-…) ve imágenes; DeepSeek/Groq/NVIDIA en este handler NO.
+  const openaiVeImagen = !!(OPENAI_KEY && OPENAI_KEY.startsWith('sk-'));
+
+  // Con foto (CCTV/escaneo): solo proveedores con visión real.
+  // Si no, Gemini 429 → DeepSeek "Too Many" / NVIDIA "Gone" y el error parece "todo falló".
+  if (imagen) {
+    if (GEMINI_KEY) pushUnico('gemini');
+    if (openaiVeImagen) pushUnico('openai');
+    if (ANTHROPIC_KEY && ANTHROPIC_KEY !== 'sk-ant-xxx') pushUnico('anthropic');
+    if (!enVercel) pushUnico('ollama');
+  } else if (aiMode === 'local' && !enVercel) {
+    pushUnico('ollama');
   } else {
-    // Add available providers
-    if (PRIMARY_PROVIDER === 'ollama') {
-      providers.push('ollama');
-      if (OPENAI_KEY) providers.push('openai');
-      if (NVIDIA_KEY) providers.push('nvidia');
-      if (ANTHROPIC_KEY && ANTHROPIC_KEY !== "sk-ant-xxx") providers.push('anthropic');
-    } else {
-      if (OPENAI_KEY) providers.push('openai');
-      if (NVIDIA_KEY) providers.push('nvidia');
-      if (ANTHROPIC_KEY && ANTHROPIC_KEY !== "sk-ant-xxx") providers.push('anthropic');
-      providers.push('ollama');
-    }
+    if (PRIMARY_PROVIDER === 'ollama' && !enVercel) pushUnico('ollama');
+    if (GEMINI_KEY) pushUnico('gemini');
+    if (OPENAI_KEY) pushUnico('openai');
+    if (NVIDIA_KEY) pushUnico('nvidia');
+    if (ANTHROPIC_KEY && ANTHROPIC_KEY !== 'sk-ant-xxx') pushUnico('anthropic');
+    if (!enVercel) pushUnico('ollama');
   }
 
-  // Intentar con los proveedores en orden
+  const fallos: string[] = [];
+  const esRateLimit = (msg: string) => /429|Too Many|quota|rate limit|RESOURCE_EXHAUSTED/i.test(msg);
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  // Intentar con los proveedores en orden (Gemini 429: reintentar antes de cambiar)
   for (const provider of providers) {
-    try {
-      if (provider === 'openai' && OPENAI_KEY) {
-        // Standard OpenAI-compatible API call (works for OpenAI, DeepSeek, Together, etc)
-        return await handleOpenAI(OPENAI_KEY, tipo, mensaje, imagen, systemPrompt);
+    const maxIntentos = provider === 'gemini' && imagen ? 3 : 1;
+    for (let intento = 1; intento <= maxIntentos; intento++) {
+      try {
+        if (provider === 'gemini' && GEMINI_KEY) {
+          return await handleGemini(GEMINI_KEY, mensaje, imagen, systemPrompt);
+        }
+        if (provider === 'openai' && OPENAI_KEY) {
+          return await handleOpenAI(OPENAI_KEY, tipo, mensaje, imagen, systemPrompt);
+        }
+        if (provider === 'nvidia' && NVIDIA_KEY) {
+          return await handleOpenAI(NVIDIA_KEY, tipo, mensaje, imagen, systemPrompt);
+        }
+        if (provider === 'anthropic' && ANTHROPIC_KEY && ANTHROPIC_KEY !== 'sk-ant-xxx') {
+          return await handleAnthropic(ANTHROPIC_KEY, tipo, mensaje, imagen, systemPrompt);
+        }
+        if (provider === 'ollama') {
+          const model = imagen ? OLLAMA_VISION : OLLAMA_TEXT;
+          return await handleOllama(model, mensaje, imagen, systemPrompt);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`Error con proveedor ${provider} (intento ${intento}), …`, err);
+        fallos.push(`${provider}: ${msg.slice(0, 80)}`);
+        if (esRateLimit(msg) && intento < maxIntentos) {
+          await sleep(12_000 * intento);
+          continue;
+        }
+        break;
       }
-      if (provider === 'nvidia' && NVIDIA_KEY) {
-        // NVIDIA Build (NIM) también es compatible con el formato OpenAI — reusa el mismo handler.
-        return await handleOpenAI(NVIDIA_KEY, tipo, mensaje, imagen, systemPrompt);
-      }
-      if (provider === 'anthropic' && ANTHROPIC_KEY && ANTHROPIC_KEY !== "sk-ant-xxx") {
-        return await handleAnthropic(ANTHROPIC_KEY, tipo, mensaje, imagen, systemPrompt);
-      }
-      if (provider === 'ollama') {
-        const model = imagen ? OLLAMA_VISION : OLLAMA_TEXT;
-        return await handleOllama(model, mensaje, imagen, systemPrompt);
-      }
-    } catch (err) {
-      console.error(`Error con proveedor ${provider}, intentando siguiente...`, err);
-      continue;
     }
   }
 
-  return new Response(JSON.stringify({ error: 'No hay proveedores de IA disponibles o todos fallaron.' }), { status: 500 });
+  const detalle = fallos.length
+    ? ` Intentos: ${fallos.join(' · ')}`
+    : ' No hay claves GEMINI/OPENAI/NVIDIA en Vercel o el modo IA está mal.';
+  return new Response(
+    JSON.stringify({
+      error: `No hay proveedores de IA disponibles o todos fallaron.${detalle}`,
+    }),
+    { status: 500, headers: { 'Content-Type': 'application/json' } }
+  );
 }
 
 async function handleAnthropic(apiKey: string, tipo: string, mensaje: string, imagen: string | undefined, systemPrompt: string) {
@@ -463,14 +572,93 @@ async function handleOllama(model: string, mensaje: string, imagen: string | und
   return new Response(readable, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
 }
 
+async function handleGemini(apiKey: string, mensaje: string, imagen: string | undefined, systemPrompt: string) {
+  // Modelo configurable por variable de entorno. Por defecto se usa el alias "-latest",
+  // que Google mantiene apuntando al modelo vigente: asi NO se rompe cuando retiran
+  // una version (que fue exactamente lo que paso con Groq y NVIDIA el 2026-09-19).
+  const model = process.env.GEMINI_MODEL || 'gemini-flash-latest';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
+
+  const parts: any[] = [{ text: mensaje }];
+  if (imagen) {
+    const base64Data = imagen.includes(',') ? imagen.split(',')[1] : imagen;
+    const mimeMatch = imagen.match(/^data:([^;]+);base64,/);
+    parts.push({
+      inlineData: {
+        mimeType: mimeMatch ? mimeMatch[1] : 'image/jpeg',
+        data: base64Data,
+      },
+    });
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      contents: [{ role: 'user', parts }],
+      generationConfig: { maxOutputTokens: 4096 },
+    }),
+  });
+
+  if (!response.ok) {
+    const detalle = await response.text().catch(() => '');
+    throw new Error(`Gemini error ${response.status}: ${detalle.slice(0, 300)}`);
+  }
+
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder('utf-8');
+
+  const readable = new ReadableStream({
+    async start(controller) {
+      let buffer = '';
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data:')) continue;
+            const data = trimmed.slice(5).trim();
+            if (!data || data === '[DONE]') continue;
+            try {
+              const parsed = JSON.parse(data);
+              const cand = parsed.candidates?.[0];
+              const textoPartes = cand?.content?.parts || [];
+              for (const p of textoPartes) {
+                if (p.thought) continue; // no enviar el "pensamiento" interno al usuario
+                if (typeof p.text === 'string' && p.text) {
+                  controller.enqueue(new TextEncoder().encode(p.text));
+                }
+              }
+            } catch (e) {
+              console.error('Gemini: chunk no parseable:', data.slice(0, 120));
+            }
+          }
+        }
+        controller.close();
+      } catch (e) { controller.error(e); }
+    },
+  });
+
+  return new Response(readable, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+}
+
 async function handleOpenAI(apiKey: string, tipo: string, mensaje: string, imagen: string | undefined, systemPrompt: string) {
   const isGroq = apiKey.startsWith('gsk_');
   const isNvidia = apiKey.startsWith('nvapi-');
   const isDeepSeek = apiKey.length === 32 && !apiKey.startsWith('sk-proj-') && !isGroq && !isNvidia;
 
   let model = ['gerente', 'madre-suprema', 'guardian-supremo', 'arbi-supremo', 'pico-claw', 'open-claw', 'auto-claw'].includes(tipo)
-    ? (isNvidia ? 'meta/llama-3.1-405b-instruct' : isGroq ? 'llama-3.3-70b-versatile' : 'gpt-4o')
-    : (isNvidia ? 'meta/llama-3.1-8b-instruct' : isGroq ? 'llama-3.1-8b-instant' : 'gpt-4o-mini');
+    // 2026-09-19: modelos anteriores (meta/llama-3.1-405b-instruct, llama-3.3-70b-versatile,
+    // meta/llama-3.1-8b-instruct, llama-3.1-8b-instant) fueron retirados por Groq (16-ago-2026)
+    // y por NVIDIA (free endpoint deprecado) — por eso Modo Rapido fallaba con "todos los
+    // proveedores fallaron". Reemplazados por modelos activos verificados esa fecha.
+    ? (isNvidia ? 'meta/llama-3.3-70b-instruct' : isGroq ? 'openai/gpt-oss-120b' : 'gpt-4o')
+    : (isNvidia ? 'meta/llama-3.3-70b-instruct' : isGroq ? 'openai/gpt-oss-20b' : 'gpt-4o-mini');
 
   const actualModel = isDeepSeek ? 'deepseek-chat' : model;
 
@@ -481,6 +669,18 @@ async function handleOpenAI(apiKey: string, tipo: string, mensaje: string, image
       : isNvidia
         ? 'https://integrate.api.nvidia.com/v1/chat/completions'
         : 'https://api.openai.com/v1/chat/completions';
+
+  // Si hay foto pero este proveedor es de solo texto, hay que DECIRSELO:
+  // si no, el modelo actua como si la hubiera visto y se inventa lo que aparece.
+  let promptSistema = systemPrompt;
+  if (imagen && (isDeepSeek || isGroq || isNvidia)) {
+    promptSistema += `
+
+=== AVISO CRITICO ===
+NO puedes ver la imagen que subio el usuario. NO la describas, NO digas de que producto se trata, NO inventes colores, formas ni ingredientes. Escribe el texto de la campana de forma general, valida para cualquier producto de panaderia, sin afirmar nada sobre la foto.
+=== FIN DEL AVISO ===
+`;
+  }
 
   const content: any[] = [{ type: 'text', text: mensaje }];
   if (imagen && !isDeepSeek && !isGroq && !isNvidia) { // DeepSeek/Groq/NVIDIA (modelos de texto) no soportan visión por este formato exacto
@@ -499,7 +699,7 @@ async function handleOpenAI(apiKey: string, tipo: string, mensaje: string, image
     body: JSON.stringify({
       model: actualModel,
       messages: [
-        { role: 'system', content: systemPrompt },
+        { role: 'system', content: promptSistema },
         { role: 'user', content }
       ],
       stream: true,

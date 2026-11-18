@@ -22,6 +22,7 @@ vi.mock('@/lib/supabase-db', () => ({
     addVenta = vi.fn(async () => {});
   },
 }));
+vi.mock('@/lib/supabase', () => ({ supabase: { from: vi.fn(() => ({ select: vi.fn(), upsert: vi.fn(), update: vi.fn() })) }, isSupabaseConfigured: false }));
 vi.mock('@/lib/security-agent', () => ({ procesarCuadreTurno: vi.fn() }));
 vi.mock('@/lib/finanzas-personales', () => ({ upsertCajaEnVentaDiaria: vi.fn() }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));

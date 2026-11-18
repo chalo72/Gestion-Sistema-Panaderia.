@@ -323,8 +323,9 @@ export function PlanNegocio({ ventas, gastos, productos, trabajadores, formatCur
     // Métricas por método de pago
     const ventasMetodos = { Efectivo: ventasManualesTotal, Nequi: 0, Tarjeta: 0, Otros: 0 };
     ventas.forEach(v => {
-      const met = v.metodo_pago || 'Efectivo';
-      if (met === 'Efectivo') ventasMetodos.Efectivo += v.total;
+      // Fix 2026-09-30: el campo real es metodoPago y se guarda en minúscula ('efectivo', 'nequi'…)
+      const met = String(v.metodoPago || 'efectivo');
+      if (met.toLowerCase() === 'efectivo') ventasMetodos.Efectivo += v.total;
       else if (met.toLowerCase().includes('nequi')) ventasMetodos.Nequi += v.total;
       else if (met.toLowerCase().includes('tarjeta')) ventasMetodos.Tarjeta += v.total;
       else ventasMetodos.Otros += v.total;

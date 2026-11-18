@@ -1,3 +1,4 @@
+import { ymdLocal } from '@/lib/fecha-local';
 /**
  * Utilidades de exportación de datos — CSV y JSON
  * PriceControl Pro Enterprise
@@ -68,6 +69,6 @@ export function exportJSON<T>(data: T[], filename: string): void {
  */
 export function getExportFilename(prefix: string): string {
     const now = new Date();
-    const date = now.toISOString().slice(0, 10);
+    const date = ymdLocal(now);
     return `${prefix}_${date}`;
 }

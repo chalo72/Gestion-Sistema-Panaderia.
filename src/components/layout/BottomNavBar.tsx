@@ -1,4 +1,5 @@
-import { LayoutDashboard, ShoppingCart, Wallet, ChefHat, Clock, Menu } from 'lucide-react';
+import React from 'react';
+import { LayoutDashboard, ShoppingCart, Wallet, ChefHat, Clock, Menu, ClipboardList, PackageCheck } from 'lucide-react';
 import type { ViewType } from '@/types';
 import { cn } from '@/lib/utils';
 import { useCan } from '@/contexts/AuthContext';
@@ -12,7 +13,7 @@ interface BottomNavBarProps {
   onOpenMenu?: () => void;
 }
 
-export function BottomNavBar({ currentView, onViewChange, alertasNoLeidas, onOpenMenu }: BottomNavBarProps) {
+export const BottomNavBar = React.memo(({ currentView, onViewChange, alertasNoLeidas, onOpenMenu }: BottomNavBarProps) => {
   const { isAdmin, role, check } = useCan();
   const { puedeVer } = usePermisosModulos();
 
@@ -28,6 +29,18 @@ export function BottomNavBar({ currentView, onViewChange, alertasNoLeidas, onOpe
       label: 'Ventas',
       icon: ShoppingCart,
       view: 'ventas' as ViewType,
+    },
+    {
+      id: 'prepedidos',
+      label: 'Preventa',
+      icon: ClipboardList,
+      view: 'prepedidos' as ViewType,
+    },
+    {
+      id: 'recepciones',
+      label: 'Recibir',
+      icon: PackageCheck,
+      view: 'recepciones' as ViewType,
     },
     {
       id: 'caja',
@@ -104,4 +117,4 @@ export function BottomNavBar({ currentView, onViewChange, alertasNoLeidas, onOpe
       )}
     </div>
   );
-}
+});
