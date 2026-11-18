@@ -413,6 +413,12 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 - **Clientes de confianza (Jairo)** pasados a la pantalla publicada: grupo "Clientes de confianza" en el selector + tarjeta de cuenta abierta.
 - **Verificado**: build OK; pruebas: 57 fallan, TODAS ya fallaban en main o en producción (0 nuevas). Pruebas nuevas: `achicar-foto.test.ts`, `valoresIguales`/`enLotes` en `sync-merge-local-gana.test.ts`. No probado en celular real.
 - **Para publicar**: juntar este PR a `main` y publicar DESDE `main`. Desde ahora `main` = producción; nadie debe volver a publicar con `vercel --prod` desde la carpeta principal (borraría estos arreglos).
+- **PUBLICADO 2026-11-17**: PR #12 juntado a `main` (commit `aa014f5d`); Vercel publicó producción (`app-eight-sigma-13`, versión con `tiene_foto` confirmada en línea). Falta confirmar en los registros de Supabase que bajaron los envíos a `creditos_trabajadores` cuando todos los aparatos se actualicen.
+
+### ⏱️ 2026-11-17 — Claude Opus 5.5 — Botón "Turno" (Asistencia) ya no dice "No hay trabajadoras" mientras carga
+- **Causa**: `Asistencia.tsx` recibía `trabajadores` de `usePriceControl.loadSecondaryDataInBackground`, que los pone al FINAL de 21 lecturas (todas las ventas, migraciones…). Mientras tanto, o si algo de esa cadena fallaba, la lista quedaba vacía. Además filtraba `estado === 'activo'` exacto.
+- **Arreglo** (rama `fix/turno-asistencia-carga-rapida`, sin tocar archivos protegidos): la pantalla lee `db.getAllTrabajadores()` y `db.getAllAsistencia()` al abrir; si el aparato no tiene trabajadoras, las trae de la nube con límite de 8 s; une con lo que llegue por props (`src/lib/asistencia-lista.ts`, 4 pruebas); muestra "Cargando trabajadoras…" en vez de "no hay"; acepta "Activo"/" activo ".
+- **Pendiente posible**: el arreglo de fondo sería que `usePriceControl` ponga trabajadoras/clientes antes de las listas pesadas (archivo protegido, requiere AUTORIZO).
 ---
 
 ✅ COMPLETADO — Claude Sonnet 5 — 2026-09-19 — Auditoría en vivo pedida por Gonzalo: Modo Ayudante (masa/arrobas), acceso por rol VENDEDOR/PANADERO, e historial de Caja/Ventas.

@@ -1,9 +1,17 @@
-import { useState, useMemo } from 'react';
-import { Clock, CheckCircle2, LogOut, Users, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, BarChart3, Monitor, FileDown } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { Clock, CheckCircle2, LogOut, Users, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, BarChart3, Monitor, FileDown, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { escapeHtml } from '@/lib/utils';
 import type { Trabajador, RegistroAsistencia } from '@/types';
 import { ymdLocal, hoyLocal } from '@/lib/fecha-local';
+import { db } from '@/lib/database';
+import { SupabaseDatabase } from '@/lib/supabase-db';
+import { trabajadorasActivas, unirAsistencia } from '@/lib/asistencia-lista';
+
+/** No esperar más de esto a la nube: mejor mostrar lo que hay que dejar la pantalla colgada. */
+const ESPERA_NUBE_MS = 8000;
+const conLimite = <T,>(p: Promise<T>, ms: number): Promise<T> =>
+  Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error('tiempo agotado')), ms))]);
 
 interface AsistenciaProps {
   trabajadores: Trabajador[];
@@ -64,7 +72,41 @@ function formatCOP(n: number): string {
 
 const DIA_LABEL = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
-export default function Asistencia({ trabajadores, asistencia, onAddRegistro }: AsistenciaProps) {
+export default function Asistencia({ trabajadores: trabajadoresProp, asistencia: asistenciaProp, onAddRegistro }: AsistenciaProps) {
+  // La pantalla lee sus propios datos al abrir (2026-11-17): antes esperaba a que terminara
+  // la carga de TODA la app y mientras tanto decía "No hay trabajadoras activas".
+  const [trabajadoresPropios, setTrabajadoresPropios] = useState<Trabajador[]>([]);
+  const [asistenciaPropia, setAsistenciaPropia] = useState<RegistroAsistencia[]>([]);
+  const [cargando, setCargando] = useState(true);
+
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      // 1) Lo guardado en este aparato: es instantáneo
+      const [ts, as] = await Promise.all([
+        db.getAllTrabajadores().catch(() => [] as Trabajador[]),
+        db.getAllAsistencia().catch(() => [] as RegistroAsistencia[]),
+      ]);
+      if (!vivo) return;
+      setTrabajadoresPropios(ts as Trabajador[]);
+      setAsistenciaPropia(as as RegistroAsistencia[]);
+      // 2) Aparato sin nada guardado todavía: traer la lista de la nube (con límite de espera)
+      if ((ts as Trabajador[]).length === 0) {
+        const nube = await conLimite(new SupabaseDatabase().getAllTrabajadores(), ESPERA_NUBE_MS).catch(() => [] as Trabajador[]);
+        if (vivo && nube.length > 0) setTrabajadoresPropios(nube as Trabajador[]);
+      }
+      if (vivo) setCargando(false);
+    })();
+    return () => { vivo = false; };
+  }, []);
+
+  const trabajadores = useMemo(() => {
+    const unidas = new Map<string, Trabajador>();
+    for (const t of [...trabajadoresPropios, ...trabajadoresProp]) if (t?.id) unidas.set(t.id, t);
+    return Array.from(unidas.values());
+  }, [trabajadoresProp, trabajadoresPropios]);
+  const asistencia = useMemo(() => unirAsistencia(asistenciaProp, asistenciaPropia), [asistenciaProp, asistenciaPropia]);
+
   const [seleccionado, setSeleccionado] = useState<Trabajador | null>(null);
   const [confirmando, setConfirmando] = useState(false);
   const [exito, setExito] = useState<{ tipo: 'entrada' | 'salida'; hora: string } | null>(null);
@@ -88,7 +130,8 @@ export default function Asistencia({ trabajadores, asistencia, onAddRegistro }: 
     return map;
   }, [asistencia, hoy]);
 
-  const trabajadoresActivos = trabajadores.filter(t => t.estado === 'activo');
+  // Antes solo contaba estado === 'activo' exacto; "Activo" o " activo" quedaban por fuera.
+  const trabajadoresActivos = useMemo(() => trabajadorasActivas(trabajadores, []), [trabajadores]);
 
   const weekDays = useMemo(() => getWeekDays(weekOffset), [weekOffset]);
 
@@ -262,8 +305,13 @@ export default function Asistencia({ trabajadores, asistencia, onAddRegistro }: 
       {tab === 'kiosko' && (
         <div className="px-4 pb-8">
 
-          {trabajadoresActivos.length === 0 ? (
-            <div className="text-center py-16 text-gray-400">
+          {trabajadoresActivos.length === 0 && cargando ? (
+            <div className="text-center py-16 text-gray-500 dark:text-gray-400" role="status">
+              <Loader2 className="w-12 h-12 mx-auto mb-4 animate-spin text-amber-500" />
+              <p className="text-lg font-semibold">Cargando trabajadoras…</p>
+            </div>
+          ) : trabajadoresActivos.length === 0 ? (
+            <div className="text-center py-16 text-gray-500 dark:text-gray-400">
               <Users className="w-16 h-16 mx-auto mb-4 opacity-30" />
               <p className="text-lg">No hay trabajadoras activas registradas</p>
               <p className="text-sm mt-1">Ve al módulo Trabajadores para agregar personal</p>
