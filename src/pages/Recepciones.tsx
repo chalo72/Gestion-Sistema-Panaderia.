@@ -40,6 +40,7 @@ import type { Categoria as CategoriaTipo } from '@/types';
 import { ymdLocal, hoyLocal } from '@/lib/fecha-local';
 import { cuadreFactura } from '@/lib/cuadre-factura';
 import { MarcaPrecioModificado } from '@/components/precios/MarcaPrecioModificado';
+import { precioParaRecepcion, describirEmpaque } from '@/lib/precio-recepcion';
 import { ultimoCambioPrecio, useCambiosPrecio } from '@/lib/cambio-precio-catalogo';
 
 /** "139.990" y "169.980" son pesos colombianos, no decimales. */
@@ -465,13 +466,14 @@ export default function Recepciones({
     const cambiosPrecio = useMemo(() => {
         return newRecepcion.items.filter(item => {
             if (!item.precioFacturado) return false;
-            const pp = preciosDelProveedor.find(p => p.productoId === item.productoId);
             const prod = getProductoById(item.productoId);
-            const base = pp?.precioCosto || prod?.costoBase || 0;
+            // Misma regla que al agregar el producto (paca de otro proveedor antes que la unidad),
+            // así no se marca un falso "subió 1900%" de $700 a $14.000.
+            const base = precioParaRecepcion(precios, item.productoId, newRecepcion.proveedorId, prod?.costoBase).precio;
             if (!base) return false;
             return Math.abs((item.precioFacturado - base) / base) > 0.02;
         });
-    }, [newRecepcion.items, preciosDelProveedor, getProductoById]);
+    }, [newRecepcion.items, newRecepcion.proveedorId, precios, getProductoById]);
 
     const handleSubmitModal = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -1005,9 +1007,24 @@ export default function Recepciones({
     const handleAddItem = (productoId: string, productoDirecto?: Producto) => {
         const producto = productoDirecto || getProductoById(productoId);
         if (!producto) return;
-        // Precio preferido: precioCosto del proveedor > costoBase del producto
-        const precioProveedor = preciosDelProveedor.find(pp => pp.productoId === productoId);
-        const precioBase = precioProveedor?.precioCosto || producto.costoBase || 0;
+        // Precio: el del proveedor escogido → si no lo tiene, la paca de otro proveedor →
+        // solo al final el costo por unidad. Antes saltaba directo al costo por unidad y el
+        // agua Pool salía a $700 (una botella) en vez de la paca (2026-11-18).
+        const sugerido = precioParaRecepcion(precios, productoId, newRecepcion.proveedorId, producto.costoBase);
+        const precioBase = sugerido.precio;
+        if (sugerido.fuente === 'otro-proveedor' && sugerido.referencia) {
+            const deQuien = getProveedorById(sugerido.referencia.proveedorId)?.nombre || 'otro proveedor';
+            const empaque = describirEmpaque(sugerido.referencia);
+            toast.warning(
+                `${producto.nombre}: este proveedor no tiene precio guardado. Se puso ${formatCurrency(precioBase)}${empaque ? ` (${empaque})` : ''} de ${deQuien}. Revísalo antes de guardar.`,
+                { duration: 8000 },
+            );
+        } else if (sugerido.fuente === 'unidad') {
+            toast.warning(
+                `${producto.nombre}: ningún proveedor tiene precio guardado. Se puso el costo por UNIDAD (${formatCurrency(precioBase)}). Si recibes por paca, corrige el precio.`,
+                { duration: 8000 },
+            );
+        }
 
         const newItem: RecepcionItem = {
             id: generateUUID(),
@@ -1334,14 +1351,18 @@ export default function Recepciones({
                             const precioNuevo = Math.round(item.precioFacturado * 100) / 100;
                             if (onAddOrUpdatePrecio) {
                                 const precioExistente = preciosDelProveedor.find(pp => pp.productoId === item.productoId);
+                                // Si este proveedor aún no tenía precio, copiar el empaque (paca x20…)
+                                // del precio en que se basó, para no guardarlo como si fuera por unidad.
+                                const base = precioExistente
+                                    ?? precioParaRecepcion(precios, item.productoId, newRecepcion.proveedorId, 0).referencia;
                                 return onAddOrUpdatePrecio({
                                     id: precioExistente?.id,
                                     productoId: item.productoId,
                                     proveedorId: newRecepcion.proveedorId,
                                     precioCosto: precioNuevo,
-                                    tipoEmbalaje: precioExistente?.tipoEmbalaje,
-                                    cantidadEmbalaje: precioExistente?.cantidadEmbalaje,
-                                    destino: precioExistente?.destino,
+                                    tipoEmbalaje: base?.tipoEmbalaje,
+                                    cantidadEmbalaje: base?.cantidadEmbalaje,
+                                    destino: base?.destino,
                                     notas: precioExistente?.notas,
                                 });
                             }
@@ -1793,7 +1814,7 @@ export default function Recepciones({
                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pt-1">
                                         {productosAgrupados.otros.map(p => {
                                             const ppEntry = preciosDelProveedor.find(pp => pp.productoId === p.id);
-                                            const precioMostrar = ppEntry?.precioCosto || p.costoBase || 0;
+                                            const precioMostrar = precioParaRecepcion(precios, p.id, newRecepcion.proveedorId, p.costoBase).precio;
                                             return (
                                                 <button key={p.id} onClick={() => { handleAddItem(p.id); setBusquedaProducto(''); }}
                                                     className={cn("flex flex-col items-start p-2.5 rounded-xl border active:scale-95 transition-all text-left gap-0.5 group",
@@ -1827,8 +1848,7 @@ export default function Recepciones({
                                         return (
                                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pt-1">
                                                 {productosAgrupados.delProveedor.map(p => {
-                                                    const ppEntry = preciosDelProveedor.find(pp => pp.productoId === p.id);
-                                                    const precioMostrar = ppEntry?.precioCosto || p.costoBase || 0;
+                                                    const precioMostrar = precioParaRecepcion(precios, p.id, newRecepcion.proveedorId, p.costoBase).precio;
                                                     return (
                                                         <button key={p.id} onClick={() => handleAddItem(p.id)}
                                                             className="flex flex-col items-start p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 active:scale-95 transition-all text-left gap-0.5 group">
@@ -1862,8 +1882,7 @@ export default function Recepciones({
                                                 {isOpen && (
                                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 p-2 border-t border-slate-50">
                                                         {prods.map(p => {
-                                                            const ppEntry = preciosDelProveedor.find(pp => pp.productoId === p.id);
-                                                            const precioMostrar = ppEntry?.precioCosto || p.costoBase || 0;
+                                                            const precioMostrar = precioParaRecepcion(precios, p.id, newRecepcion.proveedorId, p.costoBase).precio;
                                                             return (
                                                                 <button key={p.id} onClick={() => handleAddItem(p.id)}
                                                                     className="flex flex-col items-start p-2.5 rounded-lg bg-slate-50 hover:bg-indigo-50 hover:border-indigo-300 border border-transparent active:scale-95 transition-all text-left gap-0.5 group">
