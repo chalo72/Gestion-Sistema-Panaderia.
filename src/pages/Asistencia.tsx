@@ -7,7 +7,10 @@ import { ymdLocal, hoyLocal } from '@/lib/fecha-local';
 import { db } from '@/lib/database';
 import { SupabaseDatabase } from '@/lib/supabase-db';
 import { supabase } from '@/lib/supabase';
-import { trabajadorasActivas, unirAsistencia, estadoDelDia, horaLocalDeRegistro } from '@/lib/asistencia-lista';
+import {
+  trabajadorasActivas, unirAsistencia, estadoDelDia, horaLocalDeRegistro,
+  llegadasDelDia, puedeMarcarTarde, esDobleTurno,
+} from '@/lib/asistencia-lista';
 
 /** Cada cuánto se revisa la nube por llegadas marcadas en otros aparatos. */
 const REVISAR_NUBE_MS = 45000;
@@ -97,6 +100,12 @@ export default function Asistencia({ trabajadores: trabajadoresProp, asistencia:
   const [trabajadoresPropios, setTrabajadoresPropios] = useState<Trabajador[]>([]);
   const [asistenciaPropia, setAsistenciaPropia] = useState<RegistroAsistencia[]>([]);
   const [cargando, setCargando] = useState(true);
+  // Reloj de la pantalla: a las 2:00 p. m. aparece solo el botón del turno de la tarde
+  const [reloj, setReloj] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setReloj(Date.now()), 60000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     let vivo = true;
@@ -200,12 +209,21 @@ export default function Asistencia({ trabajadores: trabajadoresProp, asistencia:
     return `${lunes.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })} – ${dom.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })}`;
   }, [weekDays]);
 
-  async function registrar(trabajador: Trabajador, tipo: 'entrada' | 'salida') {
+  async function registrar(trabajador: Trabajador, tipo: 'entrada' | 'salida', turnoTarde = false) {
     if (confirmando) return;
     const nombreCorto = trabajador.nombre.split(' ')[0];
+    // Turno de la tarde (doble turno): solo si llegó en la mañana, ya son las 2 p. m. y no lo ha marcado
+    if (turnoTarde) {
+      if (!puedeMarcarTarde(asistencia, trabajador.id, hoy)) {
+        toast.info(esDobleTurno(asistencia, trabajador.id, hoy)
+          ? `${nombreCorto} ya marcó su turno de la tarde.`
+          : `El turno de la tarde se marca desde las 2:00 p. m. y después de haber llegado en la mañana.`);
+        return;
+      }
+    }
     // Ya llegó (en este aparato o en otro): no se marca dos veces
     const ahora = estadoDelDia(asistencia, trabajador.id, hoy);
-    if (tipo === 'entrada' && ahora.estado === 'adentro') {
+    if (tipo === 'entrada' && ahora.estado === 'adentro' && !turnoTarde) {
       toast.info(`${nombreCorto} ya marcó su llegada a las ${horaLocalDeRegistro(ahora.llegada)}.`);
       return;
     }
@@ -221,8 +239,14 @@ export default function Asistencia({ trabajadores: trabajadoresProp, asistencia:
         const nube = await conLimite(asistenciaDeHoyEnNube(hoy), 4000).catch(() => null);
         if (nube) {
           setAsistenciaNube(nube);
-          const enNube = estadoDelDia(unirAsistencia(asistencia, nube), trabajador.id, hoy);
-          if (enNube.estado === 'adentro') {
+          const todo = unirAsistencia(asistencia, nube);
+          const enNube = estadoDelDia(todo, trabajador.id, hoy);
+          if (turnoTarde && esDobleTurno(todo, trabajador.id, hoy)) {
+            toast.info(`${nombreCorto} ya marcó su turno de la tarde en otro aparato.`);
+            setSeleccionado(null);
+            return;
+          }
+          if (!turnoTarde && enNube.estado === 'adentro') {
             toast.info(`${nombreCorto} ya marcó su llegada a las ${horaLocalDeRegistro(enNube.llegada)} en otro aparato.`);
             setSeleccionado(null);
             return;
@@ -390,6 +414,9 @@ export default function Asistencia({ trabajadores: trabajadoresProp, asistencia:
                 const ultimo = dia.ultimo;
                 const estaAdentro = dia.estado === 'adentro';
                 const sinLlegar = dia.estado === 'sin-llegar';
+                const turnos = llegadasDelDia(asistencia, t.id, hoy);
+                const hizoDoble = turnos.manana.length > 0 && turnos.tarde.length > 0;
+                const puedeTarde = puedeMarcarTarde(asistencia, t.id, hoy, new Date(reloj));
                 const ocupada = confirmando && seleccionado?.id === t.id;
                 return (
                   <div key={t.id}
@@ -414,7 +441,11 @@ export default function Asistencia({ trabajadores: trabajadoresProp, asistencia:
                         <p className="font-bold text-gray-900 dark:text-white text-sm leading-tight truncate">
                           {t.nombre.split(' ').slice(0, 2).join(' ')}
                         </p>
-                        {estaAdentro ? (
+                        {hizoDoble ? (
+                          <span className="block text-xs font-bold text-indigo-700 dark:text-indigo-300">
+                            🌙 Doble turno · mañana {horaLocalDeRegistro(turnos.manana[0])} · tarde {horaLocalDeRegistro(turnos.tarde[0])}
+                          </span>
+                        ) : estaAdentro ? (
                           <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300">
                             ✅ Llegó a las {horaLocalDeRegistro(dia.llegada)}
                           </span>
@@ -453,6 +484,16 @@ export default function Asistencia({ trabajadores: trabajadoresProp, asistencia:
                         👋 Me voy
                       </button>
                     </div>
+
+                    {/* Doble turno: llegó en la mañana y ya son las 2:00 p. m. → marcar la tarde (cuenta 2 en Nómina) */}
+                    {puedeTarde && (
+                      <button
+                        onClick={() => registrar(t, 'entrada', true)}
+                        disabled={ocupada}
+                        className="mt-2 w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-black text-sm transition-all shadow-sm shadow-indigo-500/30 disabled:opacity-40">
+                        🌙 Marcar turno de la tarde (doble turno)
+                      </button>
+                    )}
                   </div>
                 );
               })}

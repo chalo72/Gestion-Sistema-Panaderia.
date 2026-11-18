@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { esTrabajadoraActiva, trabajadorasActivas, unirAsistencia, estadoDelDia, horaLocalDeRegistro } from './asistencia-lista';
+import {
+  esTrabajadoraActiva, trabajadorasActivas, unirAsistencia, estadoDelDia, horaLocalDeRegistro,
+  esDobleTurno, diasDobleTurnoDe, puedeMarcarTarde, horaDecimal,
+} from './asistencia-lista';
 
 const t = (id: string, nombre: string, estado: string) => ({ id, nombre, estado } as any);
 
@@ -58,5 +61,39 @@ describe('estadoDelDia (botón Llegué bloqueado en todos los aparatos)', () => 
     const esperado = new Date('2026-11-17T12:05:00.000Z').toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit', hour12: true });
     expect(h).toBe(esperado);
     expect(horaLocalDeRegistro({ hora: '07:05' } as any)).toBe('07:05');
+  });
+});
+
+describe('doble turno: mañana + desde las 2:00 p. m.', () => {
+  const f = '2026-11-18';
+  // Fechas locales (sin Z) para que la hora sea la del aparato
+  const ent = (id: string, hhmm: string, trabajadorId = 'andrea') =>
+    ({ id, trabajadorId, trabajadorNombre: 'Andrea', tipo: 'entrada', fecha: f, hora: hhmm, createdAt: new Date(`${f}T${hhmm}:00`).toISOString() } as any);
+  const sal = (id: string, hhmm: string) =>
+    ({ id, trabajadorId: 'andrea', trabajadorNombre: 'Andrea', tipo: 'salida', fecha: f, hora: hhmm, createdAt: new Date(`${f}T${hhmm}:00`).toISOString() } as any);
+
+  it('llegó 6:30 y otra vez 2:05 p. m. → doble turno', () => {
+    expect(esDobleTurno([ent('1', '06:30'), ent('2', '14:05')], 'andrea', f)).toBe(true);
+    expect(diasDobleTurnoDe([ent('1', '06:30'), ent('2', '14:05')], 'andrea', [f, '2026-11-19'])).toEqual([f]);
+  });
+
+  it('salió a almorzar y volvió en la mañana → NO es doble', () => {
+    expect(esDobleTurno([ent('1', '06:30'), sal('s', '10:00'), ent('2', '11:00')], 'andrea', f)).toBe(false);
+  });
+
+  it('solo turno de la tarde → NO es doble', () => {
+    expect(esDobleTurno([ent('1', '14:30')], 'andrea', f)).toBe(false);
+  });
+
+  it('el botón de la tarde aparece desde las 2:00 p. m. y solo una vez', () => {
+    const regs = [ent('1', '06:30')];
+    expect(puedeMarcarTarde(regs, 'andrea', f, new Date(`${f}T13:59:00`))).toBe(false);
+    expect(puedeMarcarTarde(regs, 'andrea', f, new Date(`${f}T14:00:00`))).toBe(true);
+    expect(puedeMarcarTarde([...regs, ent('2', '14:10')], 'andrea', f, new Date(`${f}T15:00:00`))).toBe(false);
+    expect(puedeMarcarTarde([], 'andrea', f, new Date(`${f}T15:00:00`))).toBe(false);
+  });
+
+  it('usa la hora del texto si no hay fecha de creación', () => {
+    expect(horaDecimal({ hora: '14:30' } as any)).toBe(14.5);
   });
 });
