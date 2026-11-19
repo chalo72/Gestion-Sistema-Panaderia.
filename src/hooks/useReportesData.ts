@@ -482,7 +482,14 @@ export function useReportesData(props: ReportesProps) {
         setHornadas([{ id: crypto.randomUUID(), tipoPan: '', bandejas: 0, panesPorBandeja: 0, totalPanes: 0 }]);
     };
     const [pinModal, setPinModal] = useState<{ ventaId: string; pin: string; error: string } | null>(null);
-    const [activeTab, setActiveTab] = useState('resumen');
+    // Un botón del inicio puede pedir abrir una pestaña concreta (2026-11-19)
+    const [activeTab, setActiveTab] = useState(() => {
+        try {
+            const t = sessionStorage.getItem('dp_reportes_abrir_tab');
+            if (t) { sessionStorage.removeItem('dp_reportes_abrir_tab'); return t; }
+        } catch { /* sin storage */ }
+        return 'resumen';
+    });
     
     // ── ESTADOS DE IA ──
     const [analisisIA, setAnalisisIA] = useState<string>('');
