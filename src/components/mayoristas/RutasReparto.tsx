@@ -2,8 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Truck, MapPin, Store, Users, Plus, Trash2, ArrowUp, ArrowDown, Clock, ChevronDown, ChevronUp,
     AlertTriangle, CheckCircle2, Package, TrendingUp, TrendingDown, Minus, Navigation, Lightbulb,
-    PlayCircle, ClipboardCheck, Banknote, X,
+    PlayCircle, ClipboardCheck, Banknote, X, Home,
 } from 'lucide-react';
+import { CrearPanRapido, VentasCasaEnCasa, DatosTiendaParada, SeccionCasaEnCasa } from '@/components/mayoristas/DespachoExtras';
+import { cargarTiendas, guardarTienda, type DatosTienda } from '@/lib/despachos-nube';
 import { toast } from 'sonner';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,7 +19,7 @@ import type { Cliente } from '@/types';
 import {
     analizarTiendas, analizarVendedores, resumenDespacho, sugerirCargaTienda, enlaceRutaMaps,
     sincronizarLineasConCarga, nuevoParada, netoParada, creditoParada, fechaLocal, horaLocal,
-    cargarDesdeNube, guardarDespachos, guardarRutas, NOMBRES_DIA,
+    cargarDesdeNube, guardarDespachos, guardarRutas, NOMBRES_DIA, catalogoDespacho,
     TOPE_DEVOLUCION_PCT, infraccionesTopeDevolucion, mensajeTopeDevolucion, unidadesParada,
     type CatalogoLinea, type ConfigMargenes, type Despacho, type LineaCarga, type MetodoCobro,
     type MotivoRecogida, type RutaReparto, type ZonaRuta, type AnalisisTienda,
@@ -32,9 +34,11 @@ interface Props {
     updateCliente: (id: string, updates: any) => Promise<void>;
     formatCurrency: (v: number) => string;
     usuarioId: string;
+    /** Crea un pan nuevo en Gestión de Productos (categoría Panes) desde el despacho. */
+    onCrearPan?: (d: { nombre: string; precioPublico: number; precioMayorista: number }) => Promise<CatalogoLinea | null>;
 }
 
-type Seccion = 'despachos' | 'rutas' | 'tiendas' | 'vendedores';
+type Seccion = 'despachos' | 'rutas' | 'tiendas' | 'casa' | 'vendedores';
 
 const ZONAS: { id: ZonaRuta; label: string }[] = [
     { id: 'ciudad', label: 'Ciudad' },
@@ -74,7 +78,7 @@ const ndOptionCls = 'bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-1
 const ndLabelCls = 'block text-[11px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-300 mb-1';
 
 export default function RutasReparto({
-    catalogo, clientes, config, creditosClientes, addCreditoCliente, updateCliente, formatCurrency, usuarioId,
+    catalogo, clientes, config, creditosClientes, addCreditoCliente, updateCliente, formatCurrency, usuarioId, onCrearPan,
 }: Props) {
     const [seccion, setSeccion] = useState<Seccion>('despachos');
     const [rutas, setRutas] = useState<RutaReparto[]>([]);
@@ -85,9 +89,11 @@ export default function RutasReparto({
     const [editandoRuta, setEditandoRuta] = useState<RutaReparto | null>(null);
     const [nuevoDespacho, setNuevoDespacho] = useState(false);
     const [detalleId, setDetalleId] = useState<string | null>(null);
+    const [tiendas, setTiendas] = useState<Record<string, DatosTienda>>({});
 
     useEffect(() => {
         let vivo = true;
+        cargarTiendas().then(t => { if (vivo) setTiendas(t); }).catch(() => {});
         cargarDesdeNube(dbNube).then(r => {
             if (!vivo) return;
             setRutas(r.rutas);
@@ -229,6 +235,7 @@ export default function RutasReparto({
         { id: 'despachos', label: 'Despachos', icon: Truck },
         { id: 'rutas', label: 'Rutas', icon: MapPin },
         { id: 'tiendas', label: 'Tiendas · Análisis', icon: Store },
+        { id: 'casa', label: 'Casa en casa', icon: Home },
         { id: 'vendedores', label: 'Vendedores', icon: Users },
     ];
 
@@ -288,6 +295,7 @@ export default function RutasReparto({
                     }}
                 />
             )}
+            {seccion === 'casa' && <SeccionCasaEnCasa despachos={despachos} formatCurrency={formatCurrency} />}
             {seccion === 'vendedores' && <SeccionVendedores vendedores={vendedores} formatCurrency={formatCurrency} />}
 
             {editandoRuta && (
@@ -311,6 +319,7 @@ export default function RutasReparto({
                     catalogo={catalogo}
                     trabajadores={trabajadores}
                     despachos={despachos}
+                    onCrearPan={onCrearPan}
                     onCerrar={() => setNuevoDespacho(false)}
                     onCrear={d => {
                         const guardado = guardarDespacho(sincronizarLineasConCarga(d));
@@ -332,6 +341,11 @@ export default function RutasReparto({
                     onSalir={salirARuta}
                     onLiquidar={liquidar}
                     onCerrar={() => setDetalleId(null)}
+                    tiendas={tiendas}
+                    onGuardarTienda={async t => {
+                        setTiendas(prev => ({ ...prev, [t.clienteId]: t }));
+                        await guardarTienda(t);
+                    }}
                 />
             )}
         </div>
@@ -365,10 +379,15 @@ function SeccionDespachos({ despachos, formatCurrency, onNuevo, onAbrir, onElimi
                             Cargó {r.totalCargado} · dejó {r.totalDejado} · recogió {r.totalRecogido} · {r.tiendasVisitadas}/{r.tiendasTotal} tiendas
                             {d.estado === 'liquidado' && r.faltanteUnidades > 0 && <span className="text-rose-600"> · faltan {r.faltanteUnidades}</span>}
                         </p>
+                        {r.ventasCasaCount > 0 && (
+                            <p className="text-[11px] text-emerald-700 font-bold mt-0.5">
+                                Casa en casa: {r.ventasCasaCount} ventas · {r.totalVendidoCasa} panes · {formatCurrency(r.ventaCasa)}
+                            </p>
+                        )}
                     </button>
                     <div className="text-right">
-                        <p className="text-sm font-black text-slate-800 dark:text-slate-100">{formatCurrency(r.ventaNeta)}</p>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase">venta neta</p>
+                        <p className="text-sm font-black text-slate-800 dark:text-slate-100">{formatCurrency(r.ventaTotal)}</p>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase">{r.ventaCasa > 0 ? 'tiendas + casa' : 'venta neta'}</p>
                     </div>
                     <button onClick={() => onEliminar(d.id)} className="p-2 rounded-lg text-slate-300 hover:text-rose-500" title="Eliminar">
                         <Trash2 className="w-4 h-4" />
@@ -539,27 +558,32 @@ function EditorRuta({ ruta, clientes, trabajadores, onCerrar, onGuardar }: {
 // ═════════════════════════════════════════════════════════════════════════════
 // NUEVO DESPACHO (carga)
 // ═════════════════════════════════════════════════════════════════════════════
-function NuevoDespacho({ rutas, catalogo, trabajadores, despachos, onCerrar, onCrear }: {
+function NuevoDespacho({ rutas, catalogo, trabajadores, despachos, onCerrar, onCrear, onCrearPan }: {
     rutas: RutaReparto[]; catalogo: CatalogoLinea[]; trabajadores: string[]; despachos: Despacho[];
     onCerrar: () => void; onCrear: (d: Despacho) => void;
+    onCrearPan?: (d: { nombre: string; precioPublico: number; precioMayorista: number }) => Promise<CatalogoLinea | null>;
 }) {
     const [rutaId, setRutaId] = useState('');
     const [vendedor, setVendedor] = useState('');
     const [fecha, setFecha] = useState(fechaLocal());
     const [carga, setCarga] = useState<LineaCarga[]>([]);
     const [busca, setBusca] = useState('');
+    const [verTodo, setVerTodo] = useState(false);
+    const [creandoPan, setCreandoPan] = useState(false);
     const ruta = rutas.find(r => r.id === rutaId);
 
     useEffect(() => { if (ruta?.vendedor && !vendedor) setVendedor(ruta.vendedor); }, [rutaId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    // Solo panes (pedido de Gonzalo 2026-11-19); "Ver todos" muestra el catálogo completo
+    const base = useMemo(() => catalogoDespacho(catalogo, verTodo), [catalogo, verTodo]);
     const resultados = useMemo(() => {
         const q = busca.trim().toLowerCase();
         // Sin escribir nada se ve todo el catálogo ordenado por categoría (antes salía vacío)
         const orden = (x: CatalogoLinea, y: CatalogoLinea) => (x.categoria || '').localeCompare(y.categoria || '') || x.nombre.localeCompare(y.nombre);
-        if (!q) return [...catalogo].sort(orden);
+        if (!q) return [...base].sort(orden);
         // Incluye ya cargados para poder deseleccionar/quitar desde la lista
-        return catalogo.filter(c => c.nombre.toLowerCase().includes(q) || (c.categoria || '').toLowerCase().includes(q)).sort(orden).slice(0, 60);
-    }, [busca, catalogo]);
+        return base.filter(c => c.nombre.toLowerCase().includes(q) || (c.categoria || '').toLowerCase().includes(q)).sort(orden).slice(0, 60);
+    }, [busca, base]);
 
     const sugerir = () => {
         if (!ruta || ruta.paradas.length === 0) { toast.info('Elige una ruta con tiendas para sugerir la carga.'); return; }
@@ -572,7 +596,7 @@ function NuevoDespacho({ rutas, catalogo, trabajadores, despachos, onCerrar, onC
         for (const [productoId, cantidad] of suma.entries()) {
             const cat = catalogo.find(c => c.productoId === productoId);
             if (!cat) continue;
-            nueva.push({ productoId, nombre: cat.nombre, cantidad, precioUnit: Math.round(cat.precioMayorista), costoUnit: Math.round(cat.costo) });
+            nueva.push({ productoId, nombre: cat.nombre, cantidad, precioUnit: Math.round(cat.precioMayorista), costoUnit: Math.round(cat.costo), precioPublico: Math.round(cat.pvp || 0) || undefined });
         }
         setCarga(nueva);
         toast.success('Carga sugerida según lo que rotó en cada tienda. Ajústala si quieres.');
@@ -590,6 +614,7 @@ function NuevoDespacho({ rutas, catalogo, trabajadores, despachos, onCerrar, onC
             cantidad: 10,
             precioUnit: Math.round(c.precioMayorista),
             costoUnit: Math.round(c.costo),
+            precioPublico: Math.round(c.pvp || 0) || undefined,
         }]);
         setBusca('');
     };
@@ -653,7 +678,16 @@ function NuevoDespacho({ rutas, catalogo, trabajadores, despachos, onCerrar, onC
                         </button>
                     </div>
                     <div className="relative">
-                        <label className={ndLabelCls} htmlFor="nd-busca">Buscar pan para cargar</label>
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                            <label className={cn(ndLabelCls, 'mb-0')} htmlFor="nd-busca">{verTodo ? 'Buscar producto (todos)' : 'Buscar pan para cargar'}</label>
+                            <button
+                                type="button"
+                                onClick={() => setVerTodo(v => !v)}
+                                className="text-xs font-black text-indigo-700 dark:text-indigo-300 underline"
+                            >
+                                {verTodo ? 'Ver solo panes' : 'Ver todos los productos'}
+                            </button>
+                        </div>
                         <Input
                             id="nd-busca"
                             placeholder="Escribe el nombre del pan…"
@@ -695,13 +729,51 @@ function NuevoDespacho({ rutas, catalogo, trabajadores, despachos, onCerrar, onC
                                 })}
                             </div>
                         )}
+                        {resultados.length === 0 && (
+                            <p className="mt-1 text-sm font-bold !text-slate-800 dark:!text-slate-100">
+                                {busca.trim() ? `No hay ningún pan llamado "${busca.trim()}".` : 'No hay panes en el catálogo (categoría Panes).'}
+                            </p>
+                        )}
+                        {onCrearPan && !creandoPan && (
+                            <button
+                                type="button"
+                                onClick={() => setCreandoPan(true)}
+                                className="mt-2 w-full h-11 rounded-xl border-2 border-dashed border-indigo-400 text-indigo-700 dark:text-indigo-300 text-sm font-black flex items-center justify-center gap-1"
+                            >
+                                <Plus className="w-4 h-4" /> {busca.trim() && resultados.length === 0 ? `Crear "${busca.trim()}" como pan nuevo` : 'Pan nuevo (no está en la lista)'}
+                            </button>
+                        )}
+                        {onCrearPan && creandoPan && (
+                            <div className="mt-2">
+                                <CrearPanRapido
+                                    nombreInicial={busca.trim()}
+                                    onCancelar={() => setCreandoPan(false)}
+                                    onCrear={async datos => {
+                                        const nuevo = await onCrearPan(datos);
+                                        if (!nuevo) return null;
+                                        setCarga(prev => prev.some(l => l.productoId === nuevo.productoId) ? prev : [...prev, {
+                                            productoId: nuevo.productoId,
+                                            nombre: nuevo.nombre,
+                                            cantidad: 10,
+                                            precioUnit: Math.round(nuevo.precioMayorista),
+                                            costoUnit: Math.round(nuevo.costo),
+                                            precioPublico: Math.round(nuevo.pvp || 0) || undefined,
+                                        }]);
+                                        setBusca('');
+                                        setCreandoPan(false);
+                                        return nuevo;
+                                    }}
+                                />
+                            </div>
+                        )}
                     </div>
 
                     {carga.length > 0 && (
-                        <div className="grid grid-cols-[1fr_4.5rem_5.5rem_2rem] gap-2 px-1 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-400">
+                        <div className="grid grid-cols-[1fr_3.5rem_4.5rem_4.5rem_1.75rem] gap-1.5 px-1 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-400">
                             <span>Producto</span>
                             <span className="text-center">Cant.</span>
-                            <span className="text-center">Mayoreo</span>
+                            <span className="text-center">Mayor</span>
+                            <span className="text-center">Público</span>
                             <span />
                         </div>
                     )}
@@ -709,7 +781,7 @@ function NuevoDespacho({ rutas, catalogo, trabajadores, despachos, onCerrar, onC
                         {carga.map(l => (
                             <div
                                 key={l.productoId}
-                                className="grid grid-cols-[1fr_4.5rem_5.5rem_2rem] items-center gap-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/80 px-2 py-1.5"
+                                className="grid grid-cols-[1fr_3.5rem_4.5rem_4.5rem_1.75rem] items-center gap-1.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/80 px-2 py-1.5"
                             >
                                 <div className="min-w-0">
                                     <span className="block text-sm font-bold truncate !text-slate-900 dark:!text-slate-100">{l.nombre}</span>
@@ -735,6 +807,15 @@ function NuevoDespacho({ rutas, catalogo, trabajadores, despachos, onCerrar, onC
                                     aria-label={`Precio mayoreo ${l.nombre}`}
                                     onChange={e => setCarga(carga.map(x => (x.productoId === l.productoId ? { ...x, precioUnit: num(e.target.value) } : x)))}
                                 />
+                                <input
+                                    type="number"
+                                    min={0}
+                                    className={cn(ndFieldCls, 'text-center px-1')}
+                                    value={l.precioPublico || ''}
+                                    title="Precio al público (venta casa en casa)"
+                                    aria-label={`Precio al público ${l.nombre}`}
+                                    onChange={e => setCarga(carga.map(x => (x.productoId === l.productoId ? { ...x, precioPublico: num(e.target.value) || undefined } : x)))}
+                                />
                                 <button
                                     type="button"
                                     onClick={() => quitarDeCarga(l.productoId)}
@@ -748,7 +829,7 @@ function NuevoDespacho({ rutas, catalogo, trabajadores, despachos, onCerrar, onC
                         ))}
                         {carga.length === 0 && (
                             <p className="text-sm font-bold !text-slate-800 dark:!text-slate-100">
-                                Busca el pan, agrégalo, pon cuántos lleva y el precio mayoreo. Luego, en la tienda, decides cuánto dejar de esa carga.
+                                Busca el pan, agrégalo, pon cuántos lleva, el precio por mayor (tienda) y el precio al público (casa en casa). Luego, en la tienda, decides cuánto dejar de esa carga.
                             </p>
                         )}
                     </div>
@@ -778,11 +859,12 @@ function NuevoDespacho({ rutas, catalogo, trabajadores, despachos, onCerrar, onC
 // ═════════════════════════════════════════════════════════════════════════════
 // DETALLE DEL DESPACHO (entregas, recogidas, cobros, regreso)
 // ═════════════════════════════════════════════════════════════════════════════
-function DetalleDespacho({ despacho, clientes, catalogo, formatCurrency, onGuardar, onSalir, onLiquidar, onCerrar }: {
-    despacho: Despacho; clientes: { id: string; nombre: string; direccion?: string; ciudad?: string }[];
+function DetalleDespacho({ despacho, clientes, catalogo, formatCurrency, onGuardar, onSalir, onLiquidar, onCerrar, tiendas, onGuardarTienda }: {
+    despacho: Despacho; clientes: { id: string; nombre: string; direccion?: string; ciudad?: string; telefono?: string }[];
     catalogo: CatalogoLinea[]; formatCurrency: (v: number) => string;
     onGuardar: (d: Despacho) => Despacho; onSalir: (d: Despacho) => Promise<Despacho>; onLiquidar: (d: Despacho) => Promise<Despacho>;
     onCerrar: () => void;
+    tiendas: Record<string, DatosTienda>; onGuardarTienda: (t: DatosTienda) => Promise<void>;
 }) {
     const [d, setD] = useState<Despacho>(despacho);
     const [sucio, setSucio] = useState(false);
@@ -841,14 +923,15 @@ function DetalleDespacho({ despacho, clientes, catalogo, formatCurrency, onGuard
                 {/* Cuadre del pan */}
                 <div className="rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
                     <p className="px-3 py-2 text-sm font-bold text-slate-950 dark:text-white bg-white dark:bg-slate-900">Resumen del carro. No se escribe aquí. Los números salen solos al anotar en cada tienda.</p>
-                    <div className="grid grid-cols-6 gap-1 bg-slate-50 dark:bg-slate-800/50 px-3 py-2 text-[9px] font-black uppercase tracking-wider text-slate-500">
-                        <span className="col-span-2">Producto</span><span className="text-center">Cargó</span><span className="text-center">Dejó</span><span className="text-center">Recogió</span><span className="text-center">Debe volver</span>
+                    <div className="grid grid-cols-7 gap-1 bg-slate-50 dark:bg-slate-800/50 px-3 py-2 text-[9px] font-black uppercase tracking-wider text-slate-500">
+                        <span className="col-span-2">Producto</span><span className="text-center">Cargó</span><span className="text-center">Dejó</span><span className="text-center">Casa</span><span className="text-center">Recogió</span><span className="text-center">Debe volver</span>
                     </div>
                     {r.filas.map(f => (
-                        <div key={f.productoId} className="grid grid-cols-6 gap-1 px-3 py-1.5 text-sm font-bold border-t border-slate-100 dark:border-slate-800">
+                        <div key={f.productoId} className="grid grid-cols-7 gap-1 px-3 py-1.5 text-sm font-bold border-t border-slate-100 dark:border-slate-800">
                             <span className="col-span-2 truncate">{f.nombre}</span>
                             <span className="text-center">{f.cargado}</span>
                             <span className="text-center text-indigo-600">{f.dejado}</span>
+                            <span className="text-center text-emerald-700">{f.vendidoCasa}</span>
                             <span className="text-center text-amber-600">{f.recogido}</span>
                             <span className={cn('text-center', f.esperadoRegreso < 0 && 'text-rose-600')}>{f.esperadoRegreso}</span>
                         </div>
@@ -901,6 +984,15 @@ function DetalleDespacho({ despacho, clientes, catalogo, formatCurrency, onGuard
                                 </button>
                                 {abre && (
                                     <div className="px-3 pb-3 space-y-2">
+                                        <DatosTiendaParada
+                                            key={`tienda-${p.clienteId}-${tiendas[p.clienteId]?.actualizadoEn ?? 0}`}
+                                            clienteId={p.clienteId}
+                                            nombreTienda={p.clienteNombre}
+                                            telefono={clientes.find(c => c.id === p.clienteId)?.telefono}
+                                            direccion={clientes.find(c => c.id === p.clienteId)?.direccion}
+                                            datos={tiendas[p.clienteId]}
+                                            onGuardar={onGuardarTienda}
+                                        />
                                         <p className="text-sm font-bold text-slate-950 dark:text-white">
                                             Estos panes ya van en el carro. No los busques otra vez. Escribe cuántos le dejaste a {p.clienteNombre}. Si te devolvió pan de antes, escríbelo en Me devolvió.
                                         </p>
@@ -968,6 +1060,15 @@ function DetalleDespacho({ despacho, clientes, catalogo, formatCurrency, onGuard
                     {d.paradas.length === 0 && <p className="text-sm font-bold text-slate-950 dark:text-white">Este despacho no tiene tiendas. Agrégalas con “+ Tienda extra”. El pan no se carga aquí.</p>}
                 </div>
 
+                {/* Casa en casa (2026-11-19) */}
+                {d.estado === 'cargado' ? (
+                    <p className="text-sm font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+                        <Home className="w-4 h-4 text-emerald-700" /> Las ventas casa en casa se anotan cuando el vendedor ya salió a ruta.
+                    </p>
+                ) : (
+                    <VentasCasaEnCasa d={d} bloqueado={bloqueado} formatCurrency={formatCurrency} onCambiar={cambiar} />
+                )}
+
                 {/* Regreso */}
                 {d.estado !== 'cargado' && (
                     <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-3 space-y-2">
@@ -997,7 +1098,10 @@ function DetalleDespacho({ despacho, clientes, catalogo, formatCurrency, onGuard
                         })}
                         <div className="flex items-center gap-2 pt-1">
                             <Banknote className="w-4 h-4 text-emerald-600" />
-                            <span className="text-xs font-bold text-slate-500">Efectivo que debe entregar: <b className="text-slate-800 dark:text-slate-100">{formatCurrency(r.cobradoEfectivo)}</b></span>
+                            <span className="text-xs font-bold text-slate-500">
+                                Efectivo que debe entregar: <b className="text-slate-800 dark:text-slate-100">{formatCurrency(r.cobradoEfectivo)}</b>
+                                {r.ventaCasaEfectivo > 0 && <span className="block text-[11px]">(tiendas {formatCurrency(r.cobradoEfectivo - r.ventaCasaEfectivo)} + casa en casa {formatCurrency(r.ventaCasaEfectivo)})</span>}
+                            </span>
                             <input type="number" min={0} disabled={bloqueado} placeholder="Entregó" className={cn(inputCls, 'w-28 ml-auto')} value={d.efectivoRecibido ?? ''}
                                 onChange={e => cambiar({ ...d, efectivoRecibido: e.target.value === '' ? undefined : num(e.target.value) })} />
                         </div>
@@ -1017,11 +1121,13 @@ function DetalleDespacho({ despacho, clientes, catalogo, formatCurrency, onGuard
                 )}
 
                 {/* Totales */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-center">
                     {[
                         { l: 'Venta bruta', v: formatCurrency(r.ventaBruta) },
                         { l: 'Devoluciones', v: formatCurrency(r.devolucionesValor) },
-                        { l: 'Venta neta', v: formatCurrency(r.ventaNeta) },
+                        { l: 'Venta neta tiendas', v: formatCurrency(r.ventaNeta) },
+                        { l: 'Casa en casa', v: formatCurrency(r.ventaCasa) },
+                        { l: 'Total ruta', v: formatCurrency(r.ventaTotal) },
                         { l: 'A crédito', v: formatCurrency(r.porCobrarCredito) },
                     ].map(k => (
                         <div key={k.l} className="rounded-xl bg-slate-50 dark:bg-slate-800/50 p-2">
