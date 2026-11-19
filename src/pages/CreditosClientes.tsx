@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { hoyLocal } from '@/lib/fecha-local';
+import { CATEGORIA_CONSUMO } from '@/lib/consumo-clientes';
 import type {
     CreditoCliente, CreditoTrabajador, MetodoPago,
     Usuario, Producto, ItemCredito, Trabajador, TrabajadorRol,
@@ -1173,6 +1174,10 @@ export default function CreditosClientes({
                                                                                     {credito.estado === 'pagado' && <CheckCircle className="w-3 h-3" />}
                                                                                     {credito.estado === 'vencido' && <AlertTriangle className="w-3 h-3" />}
                                                                                     {credito.estado}
+                                                                                </Badge>
+                                                                                {/* De dónde viene: Consumo o este módulo (2026-11-19) */}
+                                                                                <Badge className={`text-[9px] font-black uppercase tracking-widest border-none px-1.5 py-0 ${credito.categoriaCliente === CATEGORIA_CONSUMO ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>
+                                                                                    {credito.categoriaCliente === CATEGORIA_CONSUMO ? 'Desde Consumo' : 'Registrado en Clientes'}
                                                                                 </Badge>
                                                                                 <span className="text-[10px] text-slate-500 font-bold">{(() => { const f = credito.fecha || credito.createdAt || ''; return (f.includes('T') ? new Date(f) : new Date(f + 'T12:00:00')).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }); })()}</span>
                                                                             </div>
