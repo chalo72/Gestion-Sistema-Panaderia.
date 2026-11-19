@@ -1,4 +1,4 @@
-import { fechaLocal, type Despacho } from '@/lib/rutas-reparto';
+import { fechaLocal, esCategoriaPan, type Despacho } from '@/lib/rutas-reparto';
 
 /**
  * "Empacados de hoy" (2026-11-19, pedido de Gonzalo).
@@ -37,12 +37,15 @@ export interface FilaEmpacado {
 
 const normal = (s?: string) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
-/** ¿Es pan de empaque? Por nombre, descripción o categoría ("empaque", "empacado"). Nunca insumos. */
+/**
+ * ¿Es pan de empaque? Tiene que ser de una categoría de PAN ("Panes", "Pan de…")
+ * y decir "empaque"/"empacado" en el nombre, la descripción o la categoría.
+ * Así no entran los helados de "Helado Empaque" ni los insumos.
+ */
 export function esPanEmpaque(p: ProductoEmpaque): boolean {
   if (p.tipo === 'ingrediente') return false;
-  const cat = normal(p.categoria);
-  if (/^ins\b|^ins:|insumo/.test(cat)) return false;
-  return /empaque|empacad/.test(`${normal(p.nombre)} ${normal(p.descripcion)} ${cat}`);
+  if (!esCategoriaPan(p.categoria)) return false;
+  return /empaque|empacad/.test(`${normal(p.nombre)} ${normal(p.descripcion)} ${normal(p.categoria)}`);
 }
 
 const fechaDeVenta = (iso: string): string => {
