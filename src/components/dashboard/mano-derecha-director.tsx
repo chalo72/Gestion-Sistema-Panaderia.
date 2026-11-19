@@ -59,6 +59,8 @@ interface ManoDerechaDirectorProps {
   onViewInventario: () => void;
   onViewAlertas: () => void;
   onViewRecepciones: () => void;
+  /** Abre Reportes en la pestaña de control de datos (quincena). */
+  onViewReportes?: () => void;
 }
 
 const saludoPorHora = (): string => {
@@ -107,7 +109,7 @@ export const construirDecisionesDirector = (params: {
       id: 'quincena-deficit',
       prioridad: 'urgente',
       titulo: 'La quincena no alcanza sola',
-      detalle: `Faltan unos ${params.formatCurrency(params.deficit)} para cubrir lo comprometido. Revisa ventas, gastos o pagos en Reportes → Gestión Integral Operativa.`,
+      detalle: `Faltan unos ${params.formatCurrency(params.deficit)} para cubrir lo comprometido. Revisa ventas, gastos o pagos en Reportes → Gestión de Control de Datos.`,
       accionLabel: 'Cómo revisar',
       accion: params.avisarReportes,
     });
@@ -227,7 +229,13 @@ export function ManoDerechaDirector({
   onViewInventario,
   onViewAlertas,
   onViewRecepciones,
+  onViewReportes,
 }: ManoDerechaDirectorProps) {
+  const abrirControlDatos = () => {
+    if (!onViewReportes) { toast.info('Abre el menú → Reportes → Gestión de Control de Datos.'); return; }
+    try { sessionStorage.setItem('dp_reportes_abrir_tab', 'quincena'); } catch { /* sin storage */ }
+    onViewReportes();
+  };
   const hoy = fechaLocalHoy();
   const nombreCorto = (nombre || 'Director').split(' ')[0];
   const { isAdmin, role } = useCan();
@@ -289,8 +297,7 @@ export function ManoDerechaDirector({
         onViewVentas,
         onViewInventario,
         onViewAlertas,
-        avisarReportes: () =>
-          toast.info('Abre el menú → Reportes → Gestión Integral Operativa para ver números honestos.'),
+        avisarReportes: abrirControlDatos,
       }),
     [
       itemsBajoStock,
@@ -307,6 +314,7 @@ export function ManoDerechaDirector({
       onViewVentas,
       onViewInventario,
       onViewAlertas,
+      onViewReportes,
     ]
   );
 
@@ -501,8 +509,8 @@ export function ManoDerechaDirector({
           { label: 'Alertas', onClick: onViewAlertas },
           { label: 'Recepciones', onClick: onViewRecepciones },
           {
-            label: 'Gestión Integral Operativa',
-            onClick: () => toast.info('Abre el menú → Reportes → Gestión Integral Operativa.'),
+            label: 'Gestión de Control de Datos',
+            onClick: abrirControlDatos,
           },
         ].map((a) => (
           <button

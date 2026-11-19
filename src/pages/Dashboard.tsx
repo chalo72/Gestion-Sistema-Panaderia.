@@ -314,6 +314,7 @@ export default function Dashboard(props: DashboardProps) {
         onViewInventario={onViewInventario}
         onViewAlertas={onViewAlertas}
         onViewRecepciones={onViewRecepciones}
+        onViewReportes={onViewReportes}
       />
 
       {/* ═══ KPI Cards Grid ═══ */}

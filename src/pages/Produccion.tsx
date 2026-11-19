@@ -27,6 +27,7 @@ import { MermasDashboard } from '@/components/produccion/MermasDashboard';
 import { RotacionBreadView } from '@/components/produccion/RotacionBreadView';
 import { BalanceProduccionVentas } from '@/components/produccion/BalanceProduccionVentas';
 import { DistribuidorArroba } from '@/components/produccion/DistribuidorArroba';
+import { EmpacadosDeHoy } from '@/components/produccion/EmpacadosDeHoy';
 import { useControlCalidad } from '@/hooks/useControlCalidad';
 import { useLotesStock } from '@/hooks/useLotesStock';
 import { usePlanSemana } from '@/hooks/usePlanSemana';
@@ -504,6 +505,9 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                     ))}
                 </div>
             </div>
+
+            {/* Cuánto pan de empaque hacer hoy (2026-11-19) */}
+            <EmpacadosDeHoy productos={productos as any} ventas={(ventas || []) as any} inventario={(inventario || []) as any} />
 
             {/* Tabs de Navegación */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">

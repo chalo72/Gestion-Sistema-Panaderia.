@@ -176,6 +176,10 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 ## 🚀 Estado Actual y Pendientes
 
 ### ✅ Completado recientemente
+- (2026-11-19, Claude Code) **Panes de empaque + «Empacados de hoy» en Producción + botón del inicio arreglado.**
+  - Creados en Supabase (tabla `productos`, por SQL) 7 panes: Pan aliñado empacado $3.000, Pan trenzado de sal empacado $3.500, Pan de leche empacado $2.000, Pan canasta empacado $4.000, Roscón de bocadillo empacado $4.500, Trenzado de queso con arequipe empacado $4.500, Pan corona empacado $4.500. Categoría `Panes`, descripción «Pan de empaque…», `tipo` elaborado, sin `descuento_mayorista`: Gonzalo pone el % por mayor en Gestión de Productos → Editar (botones −/+). Ese % alimenta Ventas al Mayor y el Despacho.
+  - Tarjeta «Empacados de hoy» arriba de las pestañas de Producción (`components/produccion/EmpacadosDeHoy.tsx`, lógica en `lib/empacados-hoy.ts`). Hacer = promedio vendido en el POS los mismos días de la semana (últimas 4 semanas) + lo que salió en rutas (cargado − regresó bueno) − stock actual. Sin historial usa un «número base» por pan (localStorage `dp_empacados_base` + nube `empacados_base`). Detecta los panes de empaque por «empaque/empacado» en nombre, descripción o categoría.
+  - Botón del inicio «Gestión Integral Operativa» solo mostraba un aviso. Ahora se llama «Gestión de Control de Datos» y abre Reportes en esa pestaña (`sessionStorage` `dp_reportes_abrir_tab`, leído en `useReportesData`).
 - (2026-11-18, Claude Code) **Despacho (Ventas al Mayor → Rutas): solo panes, pan nuevo, casa en casa y datos de tiendas.** Rama `feat/despacho-panes-casa-en-casa`.
   - Buscador de Nuevo despacho muestra solo categorías de pan (`esCategoriaPan`: "Panes", "Pan de…", "Panadería"; excluye "INS:"), con botón «Ver todos los productos».
   - «Pan nuevo»: se crea en Gestión de Productos, categoría `Panes`, `precioVenta` = público, `descuentoMayorista` = (1 − mayor/público)×100, y entra al carro (`crearPanDespacho` en `Mayoristas.tsx`).
