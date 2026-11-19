@@ -7,6 +7,7 @@ const productos = [
   { id: 'cor', nombre: 'Pan corona empacado', categoria: 'Panes', tipo: 'elaborado' },
   { id: 'fra', nombre: 'Pan francés', categoria: 'Panes', tipo: 'elaborado' },
   { id: 'bol', nombre: 'Bolsa de empaque', categoria: 'INS: Panadería', tipo: 'ingrediente' },
+  { id: 'con', nombre: 'Cono Tres Leche', categoria: 'Helado Empaque', tipo: 'elaborado' },
 ];
 
 // Jueves 19-nov-2026 → jueves anteriores: 12, 5 nov, 29 y 22 oct
