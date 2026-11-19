@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { esPanEmpaque, calcularEmpacados } from './empacados-hoy';
+import { esPanEmpaque, calcularEmpacados, recetaDeProducto, latasPara } from './empacados-hoy';
 import type { Despacho } from './rutas-reparto';
 
 const productos = [
@@ -44,5 +44,27 @@ describe('empacados de hoy', () => {
   it('nunca pide un número negativo', () => {
     const filas = calcularEmpacados({ productos, ventas: [], despachos: [], stock: { cor: 50 }, bases: { cor: 10 }, hoy });
     expect(filas.find(f => f.productoId === 'cor')!.hacer).toBe(0);
+  });
+});
+
+describe('receta del horno de cada pan empacado', () => {
+  const formulaciones = [{ id: 'sal', nombre: 'Masa de Sal Mixta' }, { id: 'dulce', nombre: 'Masa de Dulce' }];
+  const modelos = [
+    { nombre: 'Pan Aliñado Grd Empaque', productoId: 'ali', formulacionId: 'sal', piezasPorLata: 80 },
+    { nombre: 'Pan corona Grd empaque', productoId: 'cor', formulacionId: 'dulce', piezasPorLata: 24, activo: false },
+    { nombre: 'Pan suelto', formulacionId: 'dulce', piezasPorLata: 40 },
+  ];
+
+  it('encuentra la receta y la masa por el producto unido', () => {
+    expect(recetaDeProducto('ali', modelos, formulaciones)).toEqual({ receta: 'Pan Aliñado Grd Empaque', masa: 'Masa de Sal Mixta', piezasPorLata: 80 });
+    expect(recetaDeProducto('cor', modelos, formulaciones)).toBeNull(); // receta apagada
+    expect(recetaDeProducto('nada', modelos, formulaciones)).toBeNull();
+  });
+
+  it('calcula las latas redondeando hacia arriba', () => {
+    expect(latasPara(40, 24)).toBe(2);
+    expect(latasPara(24, 24)).toBe(1);
+    expect(latasPara(0, 24)).toBe(0);
+    expect(latasPara(10, 0)).toBe(0);
   });
 });
