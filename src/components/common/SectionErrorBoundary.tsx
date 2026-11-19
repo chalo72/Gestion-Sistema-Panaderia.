@@ -54,7 +54,9 @@ export class SectionErrorBoundary extends Component<Props, State> {
     };
 
     private handleHardReload = () => {
-        
+        // Sin internet: solo recargar; borrar la copia offline dejaría la app sin poder abrir (2026-11-18)
+        if (navigator.onLine === false) { window.location.reload(); return; }
+
         // Limpiar Service Worker
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.getRegistrations().then(regs => {

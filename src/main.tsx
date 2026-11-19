@@ -58,11 +58,30 @@ if (typeof window !== 'undefined') {
   };
 })();
 
-// [Nexus-Shield] Interceptor Global de ChunkLoadError
-// vite:preloadError se dispara ANTES de que React falle → evita que el ErrorBoundary lo capture
-window.addEventListener('vite:preloadError', (event) => {
-  (event as Event).preventDefault();
-  console.warn('⚡ [Nexus-Shield] vite:preloadError — purgando caché SW y recargando...');
+// [Sin internet, 2026-11-18, AUTORIZO Gonzalo] Antes, si una parte de la app no cargaba, se
+// borraba TODA la copia offline y se recargaba: sin internet la app quedaba muerta. Ahora:
+// - sin internet: no se borra nada; se avisa que esa parte necesita internet.
+// - con internet: se limpia y recarga UNA vez (no en bucle).
+function avisarSinInternet() {
+  try {
+    if (document.getElementById('aviso-sin-internet')) return;
+    const d = document.createElement('div');
+    d.id = 'aviso-sin-internet';
+    d.setAttribute('role', 'alert');
+    d.style.cssText = 'position:fixed;left:12px;right:12px;bottom:12px;z-index:99999;background:#7c2d12;color:#fff;padding:12px 16px;border-radius:12px;font:600 15px system-ui;box-shadow:0 8px 24px rgba(0,0,0,.3)';
+    d.textContent = 'Sin internet: esta parte de la app no se pudo abrir. Lo demás sigue funcionando; vuelve a intentarlo cuando regrese el internet.';
+    d.onclick = () => d.remove();
+    document.body.appendChild(d);
+    setTimeout(() => d.remove(), 10000);
+  } catch { /* sin aviso */ }
+}
+function limpiarYRecargarSiHayInternet() {
+  if (navigator.onLine === false) { avisarSinInternet(); return; }
+  try {
+    const ultimo = Number(sessionStorage.getItem('nexus_purga_chunk') || 0);
+    if (Date.now() - ultimo < 60000) { avisarSinInternet(); return; } // ya se intentó hace poco: no repetir
+    sessionStorage.setItem('nexus_purga_chunk', String(Date.now()));
+  } catch { /* sigue */ }
   if ('caches' in window) {
     caches.keys().then(keys => {
       Promise.all(
@@ -74,6 +93,14 @@ window.addEventListener('vite:preloadError', (event) => {
   } else {
     window.location.reload();
   }
+}
+
+// [Nexus-Shield] Interceptor Global de ChunkLoadError
+// vite:preloadError se dispara ANTES de que React falle → evita que el ErrorBoundary lo capture
+window.addEventListener('vite:preloadError', (event) => {
+  (event as Event).preventDefault();
+  console.warn('⚡ [Nexus-Shield] vite:preloadError');
+  limpiarYRecargarSiHayInternet();
 });
 
 // [Nexus-Shield] Ignorar errores inofensivos de ResizeObserver de ReactFlow
@@ -97,25 +124,18 @@ window.addEventListener('unhandledrejection', (event) => {
     msg.includes('Loading chunk');
 
   if (isChunk) {
-    console.warn('⚡ [Nexus-Shield] ChunkLoadError fallback — purgando caché y recargando...');
+    console.warn('⚡ [Nexus-Shield] ChunkLoadError fallback');
     event.preventDefault();
-    if ('caches' in window) {
-      caches.keys().then(keys => {
-        Promise.all(
-          keys
-            .filter(k => !k.includes('data') && !k.includes('idb'))
-            .map(k => caches.delete(k))
-        ).then(() => window.location.reload());
-      });
-    } else {
-      window.location.reload();
-    }
+    limpiarYRecargarSiHayInternet();
   }
 });
 
 // Registro de Service Worker para PWA
 // onNeedRefresh no fuerza la activación — useAutoUpdate muestra el banner y el usuario decide
 const updateSW = registerSW({
+  // Registrar YA, sin esperar a que la página termine de cargar: en producción eso tardaba
+  // 20–40 s y el protector offline llegaba tarde o nunca (2026-11-18, AUTORIZO Gonzalo).
+  immediate: true,
   onNeedRefresh() { /* banner manejado por useAutoUpdate/CentinelaProvider */ },
   onOfflineReady() { /* sin aviso al usuario */ },
 });
