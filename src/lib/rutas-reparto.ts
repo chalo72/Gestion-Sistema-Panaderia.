@@ -43,8 +43,22 @@ export interface LineaCarga {
     productoId: string;
     nombre: string;
     cantidad: number;
-    precioUnit: number;
+    precioUnit: number; // precio por mayor (tienda)
     costoUnit: number;
+    /** Precio al público para la venta casa en casa (2026-11-19). */
+    precioPublico?: number;
+}
+
+/** Venta casa en casa durante la ruta: sin nombre del cliente, solo pan, cantidad, precio y cómo pagó. */
+export interface VentaCasa {
+    id: string;
+    hora: string; // 'HH:MM'
+    productoId: string;
+    nombre: string;
+    cantidad: number;
+    precioUnit: number; // precio al público
+    costoUnit: number;
+    metodo: MetodoCobro;
 }
 
 export interface LineaParada {
@@ -92,6 +106,8 @@ export interface Despacho {
     stockRegresoAplicado?: boolean;
     creditosRegistrados?: boolean;
     notas?: string;
+    /** Ventas casa en casa hechas en el camino (2026-11-19). */
+    ventasCasa?: VentaCasa[];
     actualizadoEn: number;
 }
 
@@ -153,7 +169,8 @@ export interface FilaCuadre {
     cargado: number;
     dejado: number;
     recogido: number;
-    esperadoRegreso: number; // cargado − dejado + recogido
+    vendidoCasa: number; // vendido casa en casa
+    esperadoRegreso: number; // cargado − dejado − vendidoCasa + recogido
     reportado: number; // buenos + dañados
     diferencia: number; // esperado − reportado (>0 = falta pan)
     precioUnit: number;
@@ -180,7 +197,15 @@ export interface ResumenDespacho {
     efectivoDiferencia: number | null; // recibido − esperado (null si aún no se contó)
     tiendasVisitadas: number;
     tiendasTotal: number;
-    sinEntregar: number; // pan que sigue sin dejarse (cargado − dejado)
+    sinEntregar: number; // pan que sigue en el carro (cargado − dejado − vendido casa en casa)
+    /** Casa en casa (2026-11-19) */
+    totalVendidoCasa: number;
+    ventaCasa: number;
+    ventaCasaEfectivo: number;
+    ventaCasaOtros: number;
+    ventasCasaCount: number;
+    /** Tiendas + casa en casa */
+    ventaTotal: number;
 }
 
 export function netoParada(p: ParadaDespacho): number {
@@ -262,7 +287,7 @@ export function resumenDespacho(d: Despacho): ResumenDespacho {
         let f = mapa.get(id);
         if (!f) {
             f = {
-                productoId: id, nombre, cargado: 0, dejado: 0, recogido: 0, esperadoRegreso: 0,
+                productoId: id, nombre, cargado: 0, dejado: 0, recogido: 0, vendidoCasa: 0, esperadoRegreso: 0,
                 reportado: 0, diferencia: 0, precioUnit: precio, costoUnit: costo,
             };
             mapa.set(id, f);
@@ -283,13 +308,17 @@ export function resumenDespacho(d: Despacho): ResumenDespacho {
             f.recogido += n(l.recogido);
         }
     }
+    for (const v of d.ventasCasa || []) {
+        const f = fila(v.productoId, v.nombre, n(v.precioUnit), n(v.costoUnit));
+        f.vendidoCasa += n(v.cantidad);
+    }
     for (const r of d.regreso) {
         const f = mapa.get(r.productoId);
         if (f) f.reportado += n(r.buenos) + n(r.danados);
     }
 
     const filas = Array.from(mapa.values()).map(f => {
-        const esperado = f.cargado - f.dejado + f.recogido;
+        const esperado = f.cargado - f.dejado - f.vendidoCasa + f.recogido;
         return { ...f, esperadoRegreso: esperado, diferencia: esperado - f.reportado };
     });
 
@@ -322,6 +351,16 @@ export function resumenDespacho(d: Despacho): ResumenDespacho {
         else cobradoOtros += n(p.cobrado);
         porCobrarCredito += creditoParada(p);
     }
+    // Casa en casa: lo cobrado en efectivo también lo debe entregar el vendedor
+    let ventaCasa = 0;
+    let ventaCasaEfectivo = 0;
+    let ventaCasaOtros = 0;
+    for (const v of d.ventasCasa || []) {
+        const valor = n(v.cantidad) * n(v.precioUnit);
+        ventaCasa += valor;
+        if (v.metodo === 'efectivo') ventaCasaEfectivo += valor;
+        else ventaCasaOtros += valor;
+    }
 
     const totalCargado = filas.reduce((s, f) => s + f.cargado, 0);
     const totalDejado = filas.reduce((s, f) => s + f.dejado, 0);
@@ -343,13 +382,81 @@ export function resumenDespacho(d: Despacho): ResumenDespacho {
         ventaBruta: redondear(ventaBruta),
         devolucionesValor: redondear(devolucionesValor),
         ventaNeta: redondear(ventaBruta - devolucionesValor),
-        cobradoEfectivo: redondear(cobradoEfectivo),
-        cobradoOtros: redondear(cobradoOtros),
+        // Efectivo que debe entregar = cobrado en tiendas + vendido casa en casa en efectivo
+        cobradoEfectivo: redondear(cobradoEfectivo + ventaCasaEfectivo),
+        cobradoOtros: redondear(cobradoOtros + ventaCasaOtros),
         porCobrarCredito: redondear(porCobrarCredito),
-        efectivoDiferencia: d.efectivoRecibido === undefined ? null : redondear(n(d.efectivoRecibido) - cobradoEfectivo),
+        efectivoDiferencia: d.efectivoRecibido === undefined ? null : redondear(n(d.efectivoRecibido) - (cobradoEfectivo + ventaCasaEfectivo)),
         tiendasVisitadas: d.paradas.filter(p => p.visitada).length,
         tiendasTotal: d.paradas.length,
-        sinEntregar: totalCargado - totalDejado,
+        sinEntregar: totalCargado - totalDejado - filas.reduce((s, f) => s + f.vendidoCasa, 0),
+        totalVendidoCasa: filas.reduce((s, f) => s + f.vendidoCasa, 0),
+        ventaCasa: redondear(ventaCasa),
+        ventaCasaEfectivo: redondear(ventaCasaEfectivo),
+        ventaCasaOtros: redondear(ventaCasaOtros),
+        ventasCasaCount: (d.ventasCasa || []).length,
+        ventaTotal: redondear(ventaBruta - devolucionesValor + ventaCasa),
+    };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Panes para el despacho (2026-11-19, pedido de Gonzalo)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** ¿Es una categoría de pan? "Panes", "Pan de empaque", "Panadería"… pero NO insumos ("INS: Panadería"). */
+export function esCategoriaPan(categoria: string | undefined | null): boolean {
+    const c = String(categoria || '').trim().toLowerCase();
+    if (!c || /^ins\b|^ins:/.test(c)) return false;
+    return /\bpan/.test(c);
+}
+
+/** Catálogo del despacho: solo panes, salvo que se pida ver todo. */
+export function catalogoDespacho(catalogo: CatalogoLinea[], verTodo = false): CatalogoLinea[] {
+    return verTodo ? catalogo : catalogo.filter(c => esCategoriaPan(c.categoria));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Análisis casa en casa vs. tiendas (2026-11-19)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface AnalisisCasaEnCasa {
+    despachos: number;
+    ventasCasa: number; // cuántas ventas casa en casa
+    unidadesCasa: number;
+    valorCasa: number;
+    valorTiendas: number; // venta neta en tiendas
+    porRuta: { ruta: string; valorCasa: number; valorTiendas: number; unidadesCasa: number }[];
+    porPan: { productoId: string; nombre: string; unidades: number; valor: number }[];
+    porDia: { dia: string; valorCasa: number; valorTiendas: number }[]; // nombre del día de la semana
+}
+
+export function analizarCasaEnCasa(despachos: Despacho[]): AnalisisCasaEnCasa {
+    const porRuta = new Map<string, { ruta: string; valorCasa: number; valorTiendas: number; unidadesCasa: number }>();
+    const porPan = new Map<string, { productoId: string; nombre: string; unidades: number; valor: number }>();
+    const porDia = new Map<string, { dia: string; valorCasa: number; valorTiendas: number }>();
+    let ventasCasa = 0, unidadesCasa = 0, valorCasa = 0, valorTiendas = 0;
+    for (const d of despachos) {
+        const r = resumenDespacho(d);
+        const ruta = d.rutaNombre || 'Sin ruta';
+        const dia = NOMBRES_DIA[new Date(d.fecha + 'T12:00:00').getDay()] || '?';
+        const fr = porRuta.get(ruta) || { ruta, valorCasa: 0, valorTiendas: 0, unidadesCasa: 0 };
+        const fd = porDia.get(dia) || { dia, valorCasa: 0, valorTiendas: 0 };
+        fr.valorCasa += r.ventaCasa; fr.valorTiendas += r.ventaNeta; fr.unidadesCasa += r.totalVendidoCasa;
+        fd.valorCasa += r.ventaCasa; fd.valorTiendas += r.ventaNeta;
+        porRuta.set(ruta, fr); porDia.set(dia, fd);
+        ventasCasa += r.ventasCasaCount; unidadesCasa += r.totalVendidoCasa; valorCasa += r.ventaCasa; valorTiendas += r.ventaNeta;
+        for (const v of d.ventasCasa || []) {
+            const fp = porPan.get(v.productoId) || { productoId: v.productoId, nombre: v.nombre, unidades: 0, valor: 0 };
+            fp.unidades += n(v.cantidad); fp.valor += n(v.cantidad) * n(v.precioUnit);
+            porPan.set(v.productoId, fp);
+        }
+    }
+    return {
+        despachos: despachos.length,
+        ventasCasa, unidadesCasa, valorCasa: redondear(valorCasa), valorTiendas: redondear(valorTiendas),
+        porRuta: [...porRuta.values()].sort((a, b) => (b.valorCasa + b.valorTiendas) - (a.valorCasa + a.valorTiendas)),
+        porPan: [...porPan.values()].sort((a, b) => b.valor - a.valor),
+        porDia: NOMBRES_DIA.map(dia => porDia.get(dia) || { dia, valorCasa: 0, valorTiendas: 0 }),
     };
 }
 
@@ -765,6 +872,12 @@ export async function cargarDesdeNube(dbx: DbRespaldo): Promise<{ rutas: RutaRep
         const d = await dbx.getBackup(CLOUD_DESPACHOS);
         if (Array.isArray(d)) despachos = mezclarPorId(despachos, d);
     } catch { /* sin nube */ }
+    // Despachos en filas propias (2026-11-19): ya no se pisan entre vendedores
+    try {
+        const { cargarDespachosNube } = await import('@/lib/despachos-nube');
+        const filas = await cargarDespachosNube();
+        if (filas) despachos = mezclarPorId(despachos, filas);
+    } catch { /* sin nube */ }
     try { localStorage.setItem(LS_RUTAS, JSON.stringify(rutas)); } catch { /* lleno */ }
     try { localStorage.setItem(LS_DESPACHOS, JSON.stringify(despachos)); } catch { /* lleno */ }
     return { rutas, despachos };
@@ -777,5 +890,8 @@ export function guardarRutas(dbx: DbRespaldo | null, rutas: RutaReparto[]) {
 
 export function guardarDespachos(dbx: DbRespaldo | null, despachos: Despacho[]) {
     try { localStorage.setItem(LS_DESPACHOS, JSON.stringify(despachos)); } catch { /* lleno */ }
+    // Bloque viejo: se sigue escribiendo para los aparatos que aún no se actualizan
     if (dbx && despachos.length > 0) dbx.saveBackup(CLOUD_DESPACHOS, despachos).catch(() => {});
+    // Fila por despacho: lo de otro vendedor ya no se borra (2026-11-19)
+    if (dbx) import('@/lib/despachos-nube').then(m => m.guardarDespachosNube(despachos)).catch(() => { /* se reintenta en el próximo guardado */ });
 }

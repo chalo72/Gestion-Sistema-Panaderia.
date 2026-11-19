@@ -176,6 +176,15 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 ## 🚀 Estado Actual y Pendientes
 
 ### ✅ Completado recientemente
+- (2026-11-18, Claude Code) **Despacho (Ventas al Mayor → Rutas): solo panes, pan nuevo, casa en casa y datos de tiendas.** Rama `feat/despacho-panes-casa-en-casa`.
+  - Buscador de Nuevo despacho muestra solo categorías de pan (`esCategoriaPan`: "Panes", "Pan de…", "Panadería"; excluye "INS:"), con botón «Ver todos los productos».
+  - «Pan nuevo»: se crea en Gestión de Productos, categoría `Panes`, `precioVenta` = público, `descuentoMayorista` = (1 − mayor/público)×100, y entra al carro (`crearPanDespacho` en `Mayoristas.tsx`).
+  - Cada línea del carro: cantidad, precio por mayor y precio público (`LineaCarga.precioPublico`).
+  - «+ Venta casa en casa» (sin nombre de cliente; pan, cantidad, precio, efectivo/nequi, hora automática) en `Despacho.ventasCasa`. El cuadre la descuenta del pan que debe volver y suma el efectivo a lo que debe entregar el vendedor.
+  - Datos de tienda (dueño, WhatsApp con enlace wa.me, barrio) en tabla nube `tiendas_ruta` + localStorage `dp_tiendas_ruta`.
+  - Pestaña «Casa en casa»: tiendas vs casa en casa por ruta, por pan y por día (7/30/90 días).
+  - **Cada despacho es ahora su propia fila** en la tabla `despachos_ruta` (antes un solo bloque en configuración: dos vendedores en ruta se pisaban). El bloque viejo se sigue escribiendo para aparatos sin actualizar. Migración `20261119100000_despachos_ruta_y_tiendas_ruta.sql` ya aplicada.
+  - Archivos: `lib/rutas-reparto.ts`, `lib/despachos-nube.ts` (nuevo), `components/mayoristas/DespachoExtras.tsx` (nuevo), `components/mayoristas/RutasReparto.tsx`, `pages/Mayoristas.tsx`. Pruebas: `rutas-casa-en-casa.test.ts` (6) + `rutas-reparto.test.ts` = 22 en verde; build OK; tipos sin errores nuevos. No se probó a mano en el navegador.
 - (2026-10-24 tarde, DSH/DeepSeek) **Verificado y PUBLICADO a producción.** Tests nuevos 24/24 en verde (`avisos-turno`, `horario-tienda`, `horario-enfermo`, `analisis-operativo`, `familia-supervivencia`), `npm run build` exit 0, y `npx vercel --prod` desde la raíz al proyecto correcto `app` (`prj_jYDczKuEmfcLp1zyX5GTIWNjMleq`, verificado en `.vercel/project.json` antes de publicar). Producción ya sirve `version.json` = **1.1.1186** (antes 1.1.1185), alias `app-eight-sigma-13.vercel.app` confirmado. **No se editó código**: solo verificación + publicación.
   - Ojo: `api/camara.ts` y `api/nequi-radar.ts` tiran `TS2307: Cannot find module '@vercel/node'` en el build de Vercel — **preexistente, no bloquea** (el build termina OK).
   - Ojo: los imports `import type { DBMisionAgent, DBHallazgoAgente } from '@/lib/database'` en `CentinelaProvider.tsx`, `AgentMissionDispatcher.tsx` y `FindingsFeed.tsx` apuntan a un módulo que NO exporta esos tipos (viven en `@/types`). Es deuda vieja (ya estaba en HEAD), no del 24-oct; no rompe build porque es `import type`.

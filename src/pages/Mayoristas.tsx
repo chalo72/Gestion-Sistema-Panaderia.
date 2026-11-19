@@ -1458,6 +1458,36 @@ export default function Mayoristas({ productos: productosProp, precios, clientes
         toast.success(editando ? 'Precios de mayoreo guardados' : `"${prod.nombre}" creado. Regístrelo en Producción para que salga su costo.`);
         return true;
     };
+
+    // ── Pan nuevo creado desde el Despacho (2026-11-19): queda en Gestión de Productos, categoría Panes ──
+    const crearPanDespacho = async (d: { nombre: string; precioPublico: number; precioMayorista: number }) => {
+        const nombre = d.nombre.trim();
+        const pvp = Math.round(d.precioPublico * 100) / 100;
+        const mayor = Math.round(d.precioMayorista * 100) / 100;
+        if (!nombre || isNaN(pvp) || pvp <= 0 || isNaN(mayor) || mayor <= 0 || mayor > pvp) {
+            toast.error('Revisa el nombre y los precios del pan.');
+            return null;
+        }
+        const dup = productos.find(p => p.nombre.trim().toLowerCase() === nombre.toLowerCase());
+        if (dup) { toast.error(`Ya existe "${dup.nombre}". Búscalo con "Ver todos los productos".`); return null; }
+        const ahora = new Date().toISOString();
+        const descuento = Math.round((1 - mayor / pvp) * 10000) / 100;
+        const prod: Producto = {
+            id: generateUUID(), nombre, categoria: 'Panes', descripcion: 'Creado desde Despacho',
+            precioVenta: pvp, margenUtilidad: 0, tipo: 'elaborado', costoBase: 0,
+            descuentoMayorista: descuento, createdAt: ahora, updatedAt: ahora,
+        } as Producto;
+        try {
+            await db.addProducto(prod);
+        } catch (e) {
+            console.error('[Mayoristas] No se pudo crear el pan desde Despacho', e);
+            toast.error('No se pudo crear el pan');
+            return null;
+        }
+        setProductosLocales(prev => [...prev.filter(p => p.id !== prod.id), prod]);
+        toast.success(`"${nombre}" creado en Gestión de Productos (Panes) y cargado al carro.`);
+        return { productoId: prod.id, nombre, categoria: 'Panes', costo: 0, precioMayorista: mayor, pvp };
+    };
     const categoriasCatalogo = Array.from(new Set(productos.filter(p => p.tipo === 'elaborado').map(p => p.categoria).filter(Boolean))).sort();
     const costoPanEmpaque = panEmpaque.producto
         ? (() => { const pe = panEmpaque.producto!; const rc = resolverCosto(pe, getMejorPrecio(pe.id)); return { valor: rc.costo, fuente: rc.fuente }; })()
@@ -4286,6 +4316,7 @@ table{width:100%;border-collapse:collapse;margin-top:8px;font-size:12px}th,td{bo
                         updateCliente={updateCliente}
                         formatCurrency={formatCurrency}
                         usuarioId={usuario?.id || 'admin'}
+                        onCrearPan={crearPanDespacho}
                     />
                 </TabsContent>
             </Tabs>
