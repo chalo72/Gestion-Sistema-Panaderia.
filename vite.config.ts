@@ -95,7 +95,10 @@ export default defineConfig(({ mode }) => {
         injectRegister: 'inline',
         // Iron-Clad: desactivado para que el SW no se suicide y limpie caches/IndexedDB
         selfDestroying: false,
-        includeAssets: ['favicon.ico', 'logo.png', 'logo2.png', 'logo_panaderia.png'],
+        // Los logos (2,5 MB cada uno) ya no van en la copia offline inicial: con internet lento la
+        // copia de 10 MB nunca terminaba de guardarse. Se guardan solos la primera vez que se ven
+        // (regla de imágenes de abajo). 2026-11-18, AUTORIZO Gonzalo.
+        includeAssets: ['favicon.ico'],
         manifest: {
           name: 'Dulce Placer - GESTIÓN',
           short_name: 'DP Gestión',
@@ -131,8 +134,17 @@ export default defineConfig(({ mode }) => {
           ]
         },
         workbox: {
-          // Excluir chunks pesados que solo se usan bajo demanda (Reportes, Exportar, OCR)
-          globIgnores: ['**/vendor-charts*', '**/vendor-excel*', '**/vendor-ocr*'],
+          // Excluir solo Exportar Excel y OCR (pesados y siempre con internet). Los GRÁFICOS sí se
+          // guardan: Proveedores, Historial, Gastos, Bóveda y Reportes los usan y sin ellos esos
+          // módulos no abrían sin internet (2026-11-18, AUTORIZO Gonzalo).
+          // Módulos pesados que casi no se usan: se guardan la primera vez que se abren con internet
+          // (regla 'assets-extra-v1'). Así la copia inicial pasa de ~10 MB a ~3 MB.
+          globIgnores: [
+            '**/vendor-excel*', '**/vendor-ocr*',
+            '**/logo.png', '**/logo_panaderia.png', '**/logo2.png',
+            '**/Expedientes-*', '**/Videovigilancia-*', '**/CCTVDigital-*', '**/AgentesIA-*',
+            '**/CargaMasiva-*', '**/MarketingStudio-*', '**/jspdf*', '**/html2canvas*',
+          ],
           globPatterns: ['**/*.{js,css,html,svg,ico,woff2}'],
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MB
           skipWaiting: true,       // Nuevo SW toma control sin esperar
@@ -154,6 +166,17 @@ export default defineConfig(({ mode }) => {
               // Supabase API: siempre desde red (datos en tiempo real)
               urlPattern: /supabase\.co/i,
               handler: 'NetworkOnly',
+            },
+            {
+              // Partes de la app que no van en la copia inicial (Excel, OCR): al usarlas con
+              // internet quedan guardadas para la próxima vez sin internet (2026-11-18).
+              urlPattern: ({ url, sameOrigin }) => sameOrigin && /^\/assets\/.+\.(js|css)$/i.test(url.pathname),
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'assets-extra-v1',
+                expiration: { maxEntries: 60, maxAgeSeconds: 60 * 60 * 24 * 60 },
+                cacheableResponse: { statuses: [200] }
+              }
             },
             {
               // Imágenes y fuentes: cache largo con revalidación

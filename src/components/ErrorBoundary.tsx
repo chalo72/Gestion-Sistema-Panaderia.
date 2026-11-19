@@ -25,6 +25,8 @@ export class ErrorBoundary extends Component<Props, State> {
 
   // Desinstalar Service Workers para romper el cach terco (causa de los Chunk Errors)
   private clearCacheAndWorkers = async () => {
+    // Sin internet: no borrar la copia offline (la app no podría volver a abrir), 2026-11-18
+    if (navigator.onLine === false) { window.location.reload(); return; }
     try {
       if ('serviceWorker' in navigator) {
         const registrations = await navigator.serviceWorker.getRegistrations();

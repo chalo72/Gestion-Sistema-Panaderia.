@@ -5,8 +5,20 @@
  */
 
 const OUTBOX_KEY = 'dp_sync_outbox_v1';
-const MAX_ITEMS = 200;
+// 2026-11-18: antes 200. Un día sin internet con ventas llenaba la cola y se perdían los
+// cambios más viejos. Con 3.000 cabe un día largo de trabajo sin conexión.
+const MAX_ITEMS = 3000;
 const MAX_ATTEMPTS = 8;
+
+/**
+ * ¿El fallo fue por falta de internet? (wifi sin señal, corte de luz en el router, datos apagados).
+ * Esos fallos NO cuentan como intento: antes, con el wifi conectado pero sin internet, se
+ * gastaban los 8 intentos y el cambio se descartaba sin subir nunca (2026-11-18).
+ */
+export const esErrorDeRed = (err: unknown): boolean => {
+  const msg = (err instanceof Error ? `${err.name} ${err.message}` : String(err ?? '')).toLowerCase();
+  return /failed to fetch|networkerror|network request failed|load failed|err_internet|err_network|err_connection|timeout|timed out|aborted|fetch failed|sin internet/.test(msg);
+};
 
 export type OutboxOp = 'upsert' | 'delete';
 
@@ -140,7 +152,8 @@ export const flushOutbox = async (handlers: FlushHandlers): Promise<number> => {
       ok += 1;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      const attempts = (item.attempts ?? 0) + 1;
+      // Sin internet no se gasta un intento: el cambio espera hasta que vuelva la conexión
+      const attempts = esErrorDeRed(err) ? (item.attempts ?? 0) : (item.attempts ?? 0) + 1;
       if (attempts < MAX_ATTEMPTS) {
         remaining.push({ ...item, attempts, lastError: msg.slice(0, 200) });
       } else {

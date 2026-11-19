@@ -51,6 +51,11 @@ export class ErrorBoundary extends Component<Props, State> {
         this.setState({ errorInfo });
 
         // [Nexus-Shield] Si es un ChunkLoadError: limpiar cache SW y recargar automáticamente
+        // Sin internet: no borrar la copia offline ni recargar en bucle (2026-11-18)
+        if (isChunkLoadError(error) && navigator.onLine === false) {
+            console.warn('⚡ [Nexus-Shield] ChunkLoadError sin internet: no se borra la copia offline');
+            return;
+        }
         if (isChunkLoadError(error)) {
             console.warn('⚡ [Nexus-Shield] ChunkLoadError detectado — recargando para obtener assets frescos...');
             this.reloadAttempts++;
