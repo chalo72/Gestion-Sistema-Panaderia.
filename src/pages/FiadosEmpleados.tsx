@@ -15,7 +15,8 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { formatCurrency } from '@/lib/utils';
 import type { Trabajador, CreditoTrabajador, Cliente, CreditoCliente } from '@/types';
-import { sumarConsumo, creditoConsumoAbierto } from '@/lib/consumo-clientes';
+import { sumarConsumo, creditoConsumoAbierto, historialCliente } from '@/lib/consumo-clientes';
+import { DetalleCuentaCliente } from '@/components/consumo/DetalleCuentaCliente';
 import { achicarFoto } from '@/lib/achicar-foto';
 import { OrigenCredito, HistorialCredito } from '@/components/nomina/HistorialCredito';
 
@@ -58,6 +59,7 @@ export default function FiadosEmpleados({
   const [nuevoCreditoTipo, setNuevoCreditoTipo] = useState<'consumo' | 'prestamo'>('consumo');
 
   const [filtroTrabajador, setFiltroTrabajador] = useState<string>('todos');
+  const [clienteDetalleId, setClienteDetalleId] = useState<string | null>(null);
   const [editandoCreditoId, setEditandoCreditoId] = useState<string | null>(null);
   const [editDesc, setEditDesc] = useState('');
   const [editMonto, setEditMonto] = useState('');
@@ -325,23 +327,38 @@ export default function FiadosEmpleados({
               <CardContent className="p-0">
                 <div className="divide-y divide-slate-100 dark:divide-slate-800">
                   {clientesConsumo.map(cl => {
-                    const cuenta = creditoConsumoAbierto(creditosClientes, cl.id);
-                    const ultimas = (cuenta?.items || []).slice(-3).reverse();
+                    const h = historialCliente(creditosClientes, cl.id);
+                    const ultimas = h.lineas.slice(0, 3);
                     return (
-                      <div key={cl.id} className="p-4 space-y-1">
+                      <button
+                        type="button"
+                        key={cl.id}
+                        onClick={() => setClienteDetalleId(cl.id)}
+                        className="w-full text-left p-4 space-y-1 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                      >
                         <div className="flex justify-between items-start gap-2">
                           <h4 className="font-bold text-slate-900 dark:text-white">{cl.nombre}</h4>
                           <span className="font-black text-indigo-600 dark:text-indigo-400">
-                            {cuenta ? `Debe ${formatCurrency(cuenta.saldo)}` : 'Al día'}
+                            {h.deudaTotal > 0 ? `Debe ${formatCurrency(h.deudaTotal)}` : 'Al día'}
                           </span>
                         </div>
-                        {ultimas.map((it, i) => (
-                          <p key={i} className="text-sm text-slate-600 dark:text-slate-400 flex justify-between gap-2">
-                            <span>{it.nombre}</span>
-                            <span className="tabular-nums">{formatCurrency(it.subtotal)}</span>
+                        {h.deudaOtros > 0 && (
+                          <p className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                            Consumo {formatCurrency(h.deudaConsumo)} + registrado en Clientes {formatCurrency(h.deudaOtros)}
+                          </p>
+                        )}
+                        {ultimas.map(it => (
+                          <p key={it.key} className="text-sm text-slate-600 dark:text-slate-400 flex justify-between gap-2">
+                            <span>{it.etiquetaFecha} · {it.texto}</span>
+                            <span className="tabular-nums">{formatCurrency(it.monto)}</span>
                           </p>
                         ))}
-                      </div>
+                        {h.lineas.length > 0 && (
+                          <p className="text-sm font-black text-indigo-700 dark:text-indigo-300 pt-1">
+                            Ver detalle, imprimir o enviar ({h.lineas.length}) →
+                          </p>
+                        )}
+                      </button>
                     );
                   })}
                 </div>
@@ -463,6 +480,18 @@ export default function FiadosEmpleados({
           </div>
         </div>
       </div>
+
+      {clienteDetalleId && (() => {
+        const cl = clientesConsumo.find(c => c.id === clienteDetalleId);
+        return cl ? (
+          <DetalleCuentaCliente
+            cliente={{ id: cl.id, nombre: cl.nombre, telefono: cl.telefono }}
+            creditos={creditosClientes}
+            formatCurrency={formatCurrency}
+            onCerrar={() => setClienteDetalleId(null)}
+          />
+        ) : null;
+      })()}
 
       {fotoAbierta && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setFotoAbierta(null)}>

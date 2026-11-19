@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sumarConsumo, creditoConsumoAbierto, CATEGORIA_CONSUMO } from './consumo-clientes';
+import { sumarConsumo, creditoConsumoAbierto, historialCliente, textoCuentaCliente, CATEGORIA_CONSUMO } from './consumo-clientes';
 import type { CreditoCliente } from '@/types';
 
 const jairo = { id: 'c-jairo', nombre: 'Jairo compadre', telefono: '' };
@@ -49,5 +49,39 @@ describe('Consumo de clientes de confianza', () => {
       { ...base, id: 'd', clienteId: 'c-jairo', categoriaCliente: CATEGORIA_CONSUMO, estado: 'activo' },
     ] as CreditoCliente[];
     expect(creditoConsumoAbierto(creditos, 'c-jairo')?.id).toBe('d');
+  });
+});
+
+describe('Cuenta completa del cliente de confianza (2026-11-19)', () => {
+  const base = { clienteNombre: 'Jairo compadre', descripcion: '', pagos: [], usuarioId: 'u', createdAt: '' };
+  const creditos = [
+    {
+      ...base, id: 'cons', clienteId: 'c-jairo', categoriaCliente: CATEGORIA_CONSUMO, estado: 'activo',
+      fecha: '2026-11-19', monto: 10600, saldo: 10600,
+      items: [
+        { productoId: 'consumo', nombre: '19/11 · 2 helados', cantidad: 1, precioUnitario: 8600, subtotal: 8600 },
+        { productoId: 'consumo', nombre: '19/11 · 1 pony', cantidad: 1, precioUnitario: 2000, subtotal: 2000 },
+      ],
+    },
+    { ...base, id: 'g1', clienteId: 'c-jairo', categoriaCliente: 'General', estado: 'activo', fecha: '2026-11-16T17:00:00.000Z', monto: 3000, saldo: 3000, descripcion: '1 ponny', items: [] },
+    { ...base, id: 'g2', clienteId: 'c-jairo', categoriaCliente: 'General', estado: 'pagado', fecha: '2026-11-10', monto: 5000, saldo: 0, descripcion: 'ya pagó', items: [] },
+    { ...base, id: 'otro', clienteId: 'otro', categoriaCliente: 'General', estado: 'activo', fecha: '2026-11-16', monto: 9999, saldo: 9999, items: [] },
+  ] as unknown as CreditoCliente[];
+
+  it('junta consumo y lo registrado en Clientes, sin lo pagado ni otros clientes', () => {
+    const h = historialCliente(creditos, 'c-jairo');
+    expect(h.deudaConsumo).toBe(10600);
+    expect(h.deudaOtros).toBe(3000);
+    expect(h.deudaTotal).toBe(13600);
+    expect(h.lineas).toHaveLength(3);
+    expect(h.lineas[0]).toMatchObject({ etiquetaFecha: '19/11', origen: 'consumo' });
+    expect(h.lineas.at(-1)).toMatchObject({ etiquetaFecha: '16/11', texto: '1 ponny', origen: 'credito' });
+  });
+
+  it('arma el texto para WhatsApp con los dos bloques y el total', () => {
+    const t = textoCuentaCliente('Jairo compadre', historialCliente(creditos, 'c-jairo'), n => `$${n}`, new Date(2026, 10, 19));
+    expect(t).toContain('*Consumo*');
+    expect(t).toContain('*Registrado en Clientes*');
+    expect(t).toContain('TOTAL A PAGAR: $13600');
   });
 });

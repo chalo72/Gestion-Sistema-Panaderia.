@@ -18,6 +18,96 @@ export const creditoConsumoAbierto = (
     (c) => c.clienteId === clienteId && c.categoriaCliente === CATEGORIA_CONSUMO && c.estado === 'activo'
   );
 
+/** Una línea del historial de consumo de un cliente de confianza (2026-11-19). */
+export interface LineaHistorialCliente {
+  key: string;
+  fecha: string; // 'YYYY-MM-DD' para ordenar
+  etiquetaFecha: string; // 'dd/mm'
+  texto: string;
+  monto: number;
+  origen: 'consumo' | 'credito';
+}
+
+const fechaCorta = (f: string | undefined): { fecha: string; etiqueta: string } => {
+  const s = String(f || '');
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return { fecha: `${m[1]}-${m[2]}-${m[3]}`, etiqueta: `${m[3]}/${m[2]}` };
+  return { fecha: '', etiqueta: '' };
+};
+
+/**
+ * Todo lo que un cliente de confianza debe, en una sola lista:
+ * - las líneas de su cuenta de consumo (cada pan anotado en Consumo),
+ * - y los créditos sueltos que tenga activos en Créditos de Clientes.
+ * Antes la pantalla de Consumo solo mostraba las 3 últimas líneas y no sumaba lo demás.
+ */
+export const historialCliente = (
+  creditos: CreditoCliente[],
+  clienteId: string
+): { lineas: LineaHistorialCliente[]; deudaConsumo: number; deudaOtros: number; deudaTotal: number } => {
+  const activos = creditos.filter((c) => c.clienteId === clienteId && c.estado === 'activo');
+  const lineas: LineaHistorialCliente[] = [];
+  let deudaConsumo = 0;
+  let deudaOtros = 0;
+  for (const c of activos) {
+    const base = fechaCorta(c.fecha || (c as any).createdAt);
+    if (c.categoriaCliente === CATEGORIA_CONSUMO) {
+      deudaConsumo += Number(c.saldo) || 0;
+      (c.items || []).forEach((it, i) => {
+        // La línea guarda la fecha al inicio: "19/11 · 2 helados"
+        const m = String(it.nombre || '').match(/^(\d{2})\/(\d{2})\s*·\s*(.*)$/);
+        const anio = base.fecha.slice(0, 4) || String(new Date().getFullYear());
+        lineas.push({
+          key: `${c.id}-${i}`,
+          fecha: m ? `${anio}-${m[2]}-${m[1]}` : base.fecha,
+          etiquetaFecha: m ? `${m[1]}/${m[2]}` : base.etiqueta,
+          texto: m ? m[3] : String(it.nombre || 'Consumo'),
+          monto: Number(it.subtotal) || 0,
+          origen: 'consumo',
+        });
+      });
+    } else {
+      deudaOtros += Number(c.saldo) || 0;
+      lineas.push({
+        key: c.id,
+        fecha: base.fecha,
+        etiquetaFecha: base.etiqueta,
+        texto: c.descripcion || 'Crédito',
+        monto: Number(c.saldo) || 0,
+        origen: 'credito',
+      });
+    }
+  }
+  // Más reciente primero; dentro del mismo día, lo último anotado arriba
+  lineas.reverse().sort((a, b) => b.fecha.localeCompare(a.fecha));
+  return { lineas, deudaConsumo: r2(deudaConsumo), deudaOtros: r2(deudaOtros), deudaTotal: r2(deudaConsumo + deudaOtros) };
+};
+
+/** Texto de la cuenta para WhatsApp (y base de la impresión). */
+export const textoCuentaCliente = (
+  nombre: string,
+  h: ReturnType<typeof historialCliente>,
+  fmt: (n: number) => string,
+  hoy: Date = new Date()
+): string => {
+  const f = `${String(hoy.getDate()).padStart(2, '0')}/${String(hoy.getMonth() + 1).padStart(2, '0')}/${hoy.getFullYear()}`;
+  let t = `🧾 *Cuenta de ${nombre} — Dulce Placer*\n📅 ${f}\n\n`;
+  const consumo = h.lineas.filter((l) => l.origen === 'consumo');
+  const otros = h.lineas.filter((l) => l.origen === 'credito');
+  if (consumo.length > 0) {
+    t += `*Consumo*\n`;
+    for (const l of consumo) t += `• ${l.etiquetaFecha} ${l.texto} — ${fmt(l.monto)}\n`;
+    t += `Subtotal consumo: ${fmt(h.deudaConsumo)}\n\n`;
+  }
+  if (otros.length > 0) {
+    t += `*Registrado en Clientes*\n`;
+    for (const l of otros) t += `• ${l.etiquetaFecha} ${l.texto} — ${fmt(l.monto)}\n`;
+    t += `Subtotal: ${fmt(h.deudaOtros)}\n\n`;
+  }
+  t += `💰 *TOTAL A PAGAR: ${fmt(h.deudaTotal)}*\n\nGracias 🙏`;
+  return t;
+};
+
 export interface NuevoConsumo {
   cliente: Pick<Cliente, 'id' | 'nombre' | 'telefono'>;
   monto: number;
