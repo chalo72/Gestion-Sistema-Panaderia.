@@ -274,8 +274,10 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                 const masaKg = f.rendimientoBaseKg * arrobas;
                 const panes = Math.floor(masaKg * (mixItem.porcentaje / 100) * 1000 / modelo.pesoUnitarioGr);
                 if (panes <= 0) continue;
-                const prod = productos.find(p => p.nombre.toLowerCase().includes(modelo.nombre.toLowerCase()) && p.tipo !== 'ingrediente')
-                    || productos.find(p => p.tipo !== 'ingrediente');
+                // Primero el producto unido a la receta; luego por nombre. Ya no se cae a "cualquier producto"
+                // (antes una receta sin producto acreditaba el pan al primer producto de la lista).
+                const prod = (modelo.productoId ? productos.find(p => p.id === modelo.productoId) : undefined)
+                    || productos.find(p => p.nombre.toLowerCase().includes(modelo.nombre.toLowerCase()) && p.tipo !== 'ingrediente');
                 if (!prod) continue;
                 await addOrdenProduccion({
                     productoId: prod.id,
@@ -507,7 +509,7 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
             </div>
 
             {/* Cuánto pan de empaque hacer hoy (2026-11-19) */}
-            <EmpacadosDeHoy productos={productos as any} ventas={(ventas || []) as any} inventario={(inventario || []) as any} />
+            <EmpacadosDeHoy productos={productos as any} ventas={(ventas || []) as any} inventario={(inventario || []) as any} modelos={modelosPan as any} formulaciones={formulaciones as any} />
 
             {/* Tabs de Navegación */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">

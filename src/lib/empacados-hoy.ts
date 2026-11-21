@@ -131,6 +131,34 @@ export function calcularEmpacados(opts: {
     .sort((a, b) => a.nombre.localeCompare(b.nombre));
 }
 
+// ── Receta del horno de cada pan empacado (2026-11-19) ──
+export interface RecetaEmpacado {
+  receta: string; // nombre del modelo de pan
+  masa: string; // nombre de la formulación (Masa de Sal, Masa de Dulce…)
+  piezasPorLata: number;
+}
+
+/** La receta unida a un producto (ModeloPan.productoId) y su masa. */
+export function recetaDeProducto(
+  productoId: string,
+  modelos: { nombre: string; productoId?: string; formulacionId?: string; piezasPorLata?: number; activo?: boolean }[],
+  formulaciones: { id: string; nombre: string }[],
+): RecetaEmpacado | null {
+  const m = modelos.find(x => x.productoId === productoId && x.activo !== false);
+  if (!m) return null;
+  return {
+    receta: m.nombre,
+    masa: formulaciones.find(f => f.id === m.formulacionId)?.nombre || 'Masa sin nombre',
+    piezasPorLata: Math.max(0, Number(m.piezasPorLata) || 0),
+  };
+}
+
+/** Cuántas latas para hacer N panes (redondea hacia arriba). 0 si no se sabe cuántos caben. */
+export function latasPara(panes: number, piezasPorLata: number): number {
+  if (panes <= 0 || piezasPorLata <= 0) return 0;
+  return Math.ceil(panes / piezasPorLata);
+}
+
 // ── Números base (sin historial) ──
 const LS_BASES = 'dp_empacados_base';
 export const CLAVE_NUBE_BASES = 'empacados_base';

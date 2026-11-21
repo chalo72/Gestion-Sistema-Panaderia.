@@ -3,15 +3,17 @@ import { Package, ChevronDown, ChevronUp } from 'lucide-react';
 import { dbNube } from '@/lib/nube-kv';
 import { cargarDesdeNube, type Despacho } from '@/lib/rutas-reparto';
 import {
-  calcularEmpacados, cargarBasesLocal, guardarBasesLocal, CLAVE_NUBE_BASES,
+  calcularEmpacados, cargarBasesLocal, guardarBasesLocal, CLAVE_NUBE_BASES, recetaDeProducto, latasPara,
   type ProductoEmpaque, type VentaLite,
 } from '@/lib/empacados-hoy';
 
 /** Tarjeta para el panadero: cuánto pan de empaque hacer hoy (2026-11-19). */
-export function EmpacadosDeHoy({ productos, ventas, inventario }: {
+export function EmpacadosDeHoy({ productos, ventas, inventario, modelos = [], formulaciones = [] }: {
   productos: ProductoEmpaque[];
   ventas: VentaLite[];
   inventario: { productoId: string; stockActual: number }[];
+  modelos?: { nombre: string; productoId?: string; formulacionId?: string; piezasPorLata?: number; activo?: boolean }[];
+  formulaciones?: { id: string; nombre: string }[];
 }) {
   const [abierto, setAbierto] = useState(true);
   const [despachos, setDespachos] = useState<Despacho[]>([]);
@@ -46,6 +48,17 @@ export function EmpacadosDeHoy({ productos, ventas, inventario }: {
   if (filas.length === 0) return null;
   const total = filas.reduce((s, f) => s + f.hacer, 0);
 
+  // Resumen por masa: qué masa preparar y cuántas latas en total
+  const porMasa = new Map<string, { panes: number; latas: number }>();
+  for (const f of filas) {
+    const r = recetaDeProducto(f.productoId, modelos, formulaciones);
+    if (!r || f.hacer <= 0) continue;
+    const g = porMasa.get(r.masa) || { panes: 0, latas: 0 };
+    g.panes += f.hacer;
+    g.latas += latasPara(f.hacer, r.piezasPorLata);
+    porMasa.set(r.masa, g);
+  }
+
   // Se guarda en el aparato al escribir y se sube a la nube un momento después
   const cambiarBase = (id: string, v: string) => {
     const n = Math.max(0, Math.round(parseFloat(v.replace(/[^\d]/g, '')) || 0));
@@ -69,10 +82,30 @@ export function EmpacadosDeHoy({ productos, ventas, inventario }: {
 
       {abierto && (
         <div className="mt-3 space-y-2">
-          {filas.map(f => (
+          {porMasa.size > 0 && (
+            <div className="rounded-2xl bg-amber-100 dark:bg-amber-900/40 p-3 space-y-1">
+              <p className="text-sm font-black text-slate-950 dark:text-white">Masas que hay que preparar</p>
+              {[...porMasa.entries()].map(([masa, g]) => (
+                <p key={masa} className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                  {masa}: {g.panes} panes{g.latas > 0 ? ` · ${g.latas} ${g.latas === 1 ? 'lata' : 'latas'}` : ''}
+                </p>
+              ))}
+            </div>
+          )}
+          {filas.map(f => {
+            const r = recetaDeProducto(f.productoId, modelos, formulaciones);
+            const latas = r ? latasPara(f.hacer, r.piezasPorLata) : 0;
+            return (
             <div key={f.productoId} className="rounded-2xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900 p-3 flex items-center gap-3">
               <div className="flex-1 min-w-0">
                 <p className="text-base font-black text-slate-950 dark:text-white">{f.nombre}</p>
+                {r ? (
+                  <p className="text-sm font-bold text-amber-800 dark:text-amber-200">
+                    {r.masa} · receta «{r.receta}»{latas > 0 ? ` · ${latas} ${latas === 1 ? 'lata' : 'latas'} (${r.piezasPorLata} por lata)` : ''}
+                  </p>
+                ) : (
+                  <p className="text-xs font-bold text-rose-700 dark:text-rose-300">Sin receta unida: en Modelos de pan escoja este producto en «Producto en Inventario».</p>
+                )}
                 {f.porBase ? (
                   <label className="mt-1 flex items-center gap-2 flex-wrap text-sm font-bold text-slate-700 dark:text-slate-200">
                     ¿Cuántos se hacen normalmente?
@@ -99,9 +132,11 @@ export function EmpacadosDeHoy({ productos, ventas, inventario }: {
                 <p className="text-3xl font-black text-amber-700 dark:text-amber-300 leading-none">{f.hacer}</p>
               </div>
             </div>
-          ))}
+            );
+          })}
           <p className="text-xs font-bold text-slate-600 dark:text-slate-300">
             Cuando estos panes se vendan en el Punto de Venta y salgan en las rutas, el número se calcula solo.
+            Lo que el panadero anota en la Libreta del horno con esa receta entra solo al inventario.
           </p>
         </div>
       )}
