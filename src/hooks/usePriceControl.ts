@@ -37,6 +37,7 @@ import {
 
 import { MONEDAS } from '@/types';
 import { ymdLocal, hoyLocal } from '@/lib/fecha-local';
+import { normalizarNombreCat, esCategoriaDeReceta, preferirPorUsoEnProductos } from '@/lib/limpiar-categorias';
 
 const defaultConfig: Configuracion = {
   margenUtilidadDefault: 30,
@@ -231,7 +232,8 @@ export function usePriceControl() {
         }
 
         // ✅ FIX: Normalizar nombres para comparación (evitar duplicados por mayúsculas/espacios)
-        const normalizar = (s: string) => s.toLowerCase().trim();
+        // 2026-11-21: también sin tildes, para que "Postobon" y "Postobón" cuenten como una sola.
+        const normalizar = normalizarNombreCat;
 
         // Validar y actualizar categorías si es necesario (comparación normalizada)
         const categoriasNuevas = CATEGORIAS_DEFAULT.filter(
@@ -283,6 +285,7 @@ export function usePriceControl() {
         finalConfig.categorias = finalConfig.categorias.filter((c) => {
           const n = normalizar(c.nombre || '');
           if (NOMBRES_DEF.has(n)) return true;
+          if (esCategoriaDeReceta(c)) return false; // receta de pan colada como categoría
           if (nombresProductosSet.has(n)) return false;
           if (/\(\d|\d{3,}/.test(c.nombre) || (c.nombre || '').length > 45) return false;
           return true;
@@ -294,6 +297,7 @@ export function usePriceControl() {
         // - Elimina duplicados de 'Bicola', 'Pasabocas', etc. que llegan con diferentes IDs desde la nube
         const catsPorNombre = new Map<string, typeof finalConfig.categorias[0]>();
         const NOMBRES_DEFAULT_SET = new Set(CATEGORIAS_DEFAULT.map(c => normalizar(c.nombre)));
+        const nombresCatUsados = new Set(prodsFinal.map(p => String(p.categoria || '').trim()).filter(Boolean));
         for (const cat of finalConfig.categorias) {
           const key = normalizar(cat.nombre);
           const existente = catsPorNombre.get(key);
@@ -308,11 +312,19 @@ export function usePriceControl() {
             // Ganar la del sistema o la que tiene tipo=insumo (más específico)
             if ((!existenteEsDefault && catEsDefault) || (!existenteTieneInsumo && catTieneInsumo)) {
               catsPorNombre.set(key, cat);
+            } else if (preferirPorUsoEnProductos(cat.nombre, existente.nombre, nombresCatUsados)) {
+              // Mismo nombre con/sin tilde: quedarse con la forma exacta que usan los productos
+              catsPorNombre.set(key, { ...existente, nombre: cat.nombre });
             }
             // En todos los otros casos conservamos la existente (primera encontrada)
           }
         }
-        finalConfig.categorias = Array.from(catsPorNombre.values());
+        // Si la única que quedó dice "Postobon" pero los productos dicen "Postobón", usar la de los productos
+        const usadoPorNormal = new Map(Array.from(nombresCatUsados).map(n => [normalizar(n), n] as const));
+        finalConfig.categorias = Array.from(catsPorNombre.values()).map(c => {
+          const usado = usadoPorNormal.get(normalizar(c.nombre));
+          return usado && usado !== c.nombre && !nombresCatUsados.has(c.nombre) ? { ...c, nombre: usado } : c;
+        });
         await db.saveConfiguracion({ ...finalConfig, id: 'main' });
 
         setConfiguracion(finalConfig);
