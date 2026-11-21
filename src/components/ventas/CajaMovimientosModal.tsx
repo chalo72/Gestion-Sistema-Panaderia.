@@ -62,11 +62,16 @@ export function CajaMovimientosModal({
 
     const cajaSeleccionada = cajasAbiertas.find(c => c.id === cajaId) ?? cajaActiva;
 
+    // Pesos enteros (2026-11-20): en el celular se escribe "80.000" y la casilla de número lo
+    // leía vacía o como 80, y el botón Confirmar quedaba apagado sin decir por qué.
+    const montoNum = parseInt(monto, 10) || 0;
+    const falta = montoNum <= 0 ? 'Escriba el monto' : !motivo.trim() ? 'Escriba el motivo (ej: Gas)' : '';
+
     const handleConfirm = async () => {
-        if (!monto || parseFloat(monto) <= 0 || !motivo) return;
+        if (falta) return;
         setIsSaving(true);
         try {
-            await onSubmit(parseFloat(monto), motivo, cajaId || undefined);
+            await onSubmit(montoNum, motivo.trim(), cajaId || undefined);
             setMonto('');
             setMotivo('');
             onOpenChange(false);
@@ -169,9 +174,11 @@ export function CajaMovimientosModal({
                                 esEntrada ? "text-emerald-500" : "text-rose-500"
                             )} />
                             <input
-                                type="number"
-                                value={monto}
-                                onChange={e => setMonto(e.target.value)}
+                                type="text"
+                                inputMode="numeric"
+                                aria-label="Monto"
+                                value={monto.replace(/\B(?=(\d{3})+(?!\d))/g, '.')}
+                                onChange={e => setMonto(e.target.value.replace(/\D/g, ''))}
                                 placeholder="0"
                                 autoFocus
                                 className="w-full h-12 pl-9 pr-3 text-xl font-black rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 outline-none focus:border-indigo-400 tabular-nums transition-all"
@@ -193,6 +200,10 @@ export function CajaMovimientosModal({
                         </div>
                     </div>
 
+                    {falta && (monto || motivo) && (
+                        <p className="text-sm font-bold text-rose-700 dark:text-rose-300" role="status">{falta}</p>
+                    )}
+
                     {/* Botones */}
                     <div className="flex gap-3 pt-1">
                         <Button
@@ -203,7 +214,7 @@ export function CajaMovimientosModal({
                             Cancelar
                         </Button>
                         <Button
-                            disabled={isSaving || !monto || !motivo}
+                            disabled={isSaving || !!falta}
                             onClick={handleConfirm}
                             className={cn(
                                 "flex-[2] h-10 text-white rounded-xl font-black uppercase text-xs",
