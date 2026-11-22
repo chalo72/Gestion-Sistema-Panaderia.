@@ -79,7 +79,7 @@ describe('CAPA 2 — CADENA: handleSubmit transmite todos los campos a DB', () =
     'nombre: item.nombre',
     'costoBase: Math.round(Number(item.costoUnitario) || 0)',
     'margenUtilidad: Number(item.margenVenta)',
-    'precioVenta: Math.round(Number(item.precioVenta) || 0)',
+    'precioVenta: redondearPrecio(item.precioVenta)',
   ];
 
   camposProducto.forEach(campo => {
@@ -199,8 +199,8 @@ describe('CAPA 5 — CENTINELA: Fórmulas matemáticas blindadas', () => {
     expect(proveedorForm).toContain('Math.round(costUnit)');
   });
 
-  it('Form: precioVenta redondeado = Math.round(sellPrice)', () => {
-    expect(proveedorForm).toContain('Math.round(sellPrice)');
+  it('Form: precioVenta redondeado = redondearPrecio(sellPrice) (de 50 en 50)', () => {
+    expect(proveedorForm).toContain('redondearPrecio(sellPrice)');
   });
 
   // --- Fórmulas de usePriceControl (addOrUpdatePrecio) ---

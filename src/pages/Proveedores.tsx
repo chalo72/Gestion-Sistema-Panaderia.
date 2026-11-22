@@ -68,6 +68,7 @@ import {
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { hoyLocal } from '@/lib/fecha-local';
+import { redondearPrecio } from '@/lib/precio-redondo';
 
 /* ── Tipos para la vista ── */
 type TipoEmbalaje =
@@ -726,7 +727,7 @@ export function Proveedores({
                 nombre: item.nombre,
                 categoria: item.categoria || 'Otro',
                 descripcion: descripcionGenerada,
-                precioVenta: Math.round(Number(item.precioVenta) || 0),
+                precioVenta: redondearPrecio(item.precioVenta),
                 margenUtilidad: Number(item.margenVenta) || 30,
                 tipo,
                 costoBase: Math.round(Number(item.costoUnitario) || 0),
@@ -764,7 +765,7 @@ export function Proveedores({
                   categoria: item.categoria || 'Otro',
                   costoBase: Math.round(Number(item.costoUnitario) || 0),
                   margenUtilidad: Number(item.margenVenta) || 30,
-                  precioVenta: Math.round(Number(item.precioVenta) || 0),
+                  precioVenta: redondearPrecio(item.precioVenta),
                 }),
               });
 

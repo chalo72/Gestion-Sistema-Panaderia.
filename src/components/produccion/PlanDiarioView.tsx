@@ -591,7 +591,7 @@ export function PlanDiarioView({
 
         return (
           <Dialog open={!!analisisIaItem} onOpenChange={(open) => !open && setAnalisisIaItem(null)}>
-            <DialogContent className="max-w-md bg-gradient-to-br from-slate-900 to-indigo-950 border border-indigo-500/30 shadow-2xl p-0 overflow-hidden rounded-[2rem]">
+            <DialogContent className="text-white max-w-md bg-gradient-to-br from-slate-900 to-indigo-950 border border-indigo-500/30 shadow-2xl p-0 overflow-hidden rounded-[2rem]">
               <DialogHeader className="px-6 py-5 border-b border-indigo-500/20 bg-indigo-950/50 flex flex-row items-center gap-4 space-y-0">
                 <div className="w-12 h-12 rounded-full bg-indigo-600 flex items-center justify-center shrink-0 shadow-[0_0_15px_rgba(79,70,229,0.5)]">
                   <BrainCircuit className="w-6 h-6 text-white" />

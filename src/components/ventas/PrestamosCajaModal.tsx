@@ -139,7 +139,7 @@ export function PrestamosCajaModal({
         <Dialog open={isOpen} onOpenChange={handleClose}>
             <DialogContent className="max-w-md rounded-2xl p-0 overflow-hidden border-none shadow-2xl bg-white dark:bg-slate-900">
                 {/* Encabezado */}
-                <DialogHeader className="bg-gradient-to-br from-violet-600 to-purple-700 p-5 text-center">
+                <DialogHeader className="text-white bg-gradient-to-br from-violet-600 to-purple-700 p-5 text-center">
                     <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-white/20">
                         <ArrowRightLeft className="w-6 h-6 text-white" />
                     </div>

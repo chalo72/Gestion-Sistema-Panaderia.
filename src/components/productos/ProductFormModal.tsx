@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils';
 import { CATEGORIAS_DEFAULT } from '@/lib/seed-data';
 import { TIPOS_EMPAQUE, empaqueDesdeFormulario, precioVentaConMargen } from '@/lib/empaque-producto';
 import type { Categoria, Proveedor, Producto } from '@/types';
+import { InputPesos } from '@/components/ui/input-pesos';
 
 const COLORES_RAPIDOS = [
     '#f97316', '#3b82f6', '#10b981', '#8b5cf6',
@@ -626,12 +627,12 @@ export function ProductFormModal({
                                     </Label>
                                     <div className="relative">
                                         <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-orange-400" />
-                                        <Input
-                                            type="number" step="100" min="0"
+                                        <InputPesos
+                                            aria-label="Precio de venta"
                                             value={formData.precioVenta}
-                                            onChange={e => {
-                                                const newPrecio = e.target.value;
-                                                const precioNum = parseFloat(newPrecio);
+                                            onValor={n => {
+                                                const newPrecio = n > 0 ? String(n) : '';
+                                                const precioNum = n;
                                                 // Si hay costo base, recalcular el margen automáticamente
                                                 if (costoReal > 0 && !isNaN(precioNum) && precioNum > 0) {
                                                     const nuevoMargen = ((precioNum - costoReal) / precioNum) * 100;
@@ -640,7 +641,7 @@ export function ProductFormModal({
                                                     setFormData({ ...formData, precioVenta: newPrecio });
                                                 }
                                             }}
-                                            className="h-12 pl-9 text-lg font-bold rounded-xl border-orange-200 dark:border-orange-800/40 bg-white dark:bg-slate-900 focus:border-orange-400"
+                                            className="w-full h-12 pl-9 pr-3 text-lg font-bold rounded-xl border border-orange-200 dark:border-orange-800/40 bg-white dark:bg-slate-900 outline-none focus:border-orange-400"
                                             placeholder="0.00"
                                         />
                                     </div>

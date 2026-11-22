@@ -29,6 +29,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { Producto, Proveedor, Categoria } from '@/types';
 import { formatCurrency } from '@/lib/utils';
+import { redondearPrecio } from '@/lib/precio-redondo';
 
 /* ── COMPONENTE DE MONEDA MEJORADO ── */
 function CurrencyInput({ 
@@ -435,8 +436,8 @@ export function ProveedorForm({
         uid: editingUid || generateUUID(),
         precioCosto: Math.round((prodActual.precioCosto || 0) / 100) * 100,
         costoUnitario: Math.round(costUnit),
-        precioVenta: Math.round(sellPrice),
-        precioVentaPack: Math.round((prodActual.precioCosto || 0) * (1 + Number(prodActual.margenVenta || 0) / 100)),
+        precioVenta: redondearPrecio(sellPrice),
+        precioVentaPack: redondearPrecio((prodActual.precioCosto || 0) * (1 + Number(prodActual.margenVenta || 0) / 100)),
         stockRecibido: prodActual.stockRecibido,
       };
       if (editingUid) {
@@ -483,8 +484,8 @@ export function ProveedorForm({
       uid: editingUid || generateUUID(),
       precioCosto: Math.round((prodActual.precioCosto || 0) / 100) * 100,
       costoUnitario: Math.round(costUnit),
-      precioVenta: Math.round(sellPrice),
-      precioVentaPack: Math.round(sellPrice * (prodActual.cantidadEmbalaje || 1)),
+      precioVenta: redondearPrecio(sellPrice),
+      precioVentaPack: redondearPrecio(sellPrice * (prodActual.cantidadEmbalaje || 1)),
       stockRecibido: prodActual.stockRecibido
     };
 
@@ -1454,7 +1455,7 @@ export function ProveedorForm({
                           <Label className="text-[10px] font-black uppercase tracking-widest text-emerald-600 ml-1">Venta / {getBaseUnit(prodActual.unidadMedida)}</Label>
                           <div className="relative group flex gap-1">
                             <CurrencyInput
-                                value={sellPrice > 0 ? Math.round(sellPrice) : 0}
+                                value={sellPrice > 0 ? redondearPrecio(sellPrice) : 0}
                                 onChange={(newPrice) => {
                                   if (costUnit > 0) {
                                     const newMargen = ((newPrice / costUnit) - 1) * 100;

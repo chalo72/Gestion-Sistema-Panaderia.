@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, type KeyboardEvent as TeclaEvento } from 'react';
 import { Search, X, DollarSign, TrendingUp, Package, Store, ArrowRight, Tag } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { useCan } from '@/contexts/AuthContext';
 import type { Producto, Proveedor, PrecioProveedor } from '@/types';
 import { cn } from '@/lib/utils';
-import { buscarProductosVenta, resumenEspurgue } from '@/lib/busqueda-productos';
+import { buscarProductosVenta, resumenEspurgue, normTexto } from '@/lib/busqueda-productos';
 
 // Utilidad ultra-segura para evitar "Cannot convert object to primitive value"
 const safeNumber = (val: any): number => {
@@ -45,6 +45,8 @@ export function BusquedaRapida({
 }: BusquedaRapidaProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [seleccion, setSeleccion] = useState(0); // fila marcada con ↑↓ (2026-11-21)
+  const [abierto, setAbierto] = useState<string | null>(null); // producto con el detalle abierto
   const { check } = useCan();
 
   // Permisos
@@ -74,6 +76,31 @@ export function BusquedaRapida({
   );
 
   const espurgue = useMemo(() => resumenEspurgue(productos), [productos]);
+
+  // Nombres repetidos en el catálogo (ej. dos "Ponny Botella" con precios distintos)
+  const repetidos = useMemo(() => {
+    const cuenta = new Map<string, number>();
+    for (const p of productos) { const k = normTexto(p.nombre); if (k) cuenta.set(k, (cuenta.get(k) || 0) + 1); }
+    return cuenta;
+  }, [productos]);
+
+  useEffect(() => { setSeleccion(0); setAbierto(null); }, [searchTerm]);
+  useEffect(() => {
+    document.getElementById(`busq-fila-${seleccion}`)?.scrollIntoView({ block: 'nearest' });
+  }, [seleccion]);
+
+  const copiarProducto = (p: Producto) => {
+    if ((Number(p.precioVenta) || 0) > 0) handleCopyPrice(p.precioVenta, p.nombre);
+    else toast.message('Sin precio de venta', { description: p.nombre });
+  };
+
+  // ↑↓ para moverse, Enter copia el precio del marcado (antes el pie lo prometía y no hacía nada)
+  const onTeclaBusqueda = (e: TeclaEvento) => {
+    if (!resultados.length) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); setSeleccion(i => Math.min(i + 1, resultados.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setSeleccion(i => Math.max(i - 1, 0)); }
+    else if (e.key === 'Enter') { e.preventDefault(); const p = resultados[Math.min(seleccion, resultados.length - 1)]; if (p) copiarProducto(p); }
+  };
 
   // Calcular estadísticas del producto
   const getProductoStats = (producto: Producto) => {
@@ -137,6 +164,7 @@ export function BusquedaRapida({
                 placeholder="Busca un producto..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyDown={onTeclaBusqueda}
                 className="flex-1 border-0 focus-visible:ring-0 text-xl sm:text-2xl bg-transparent text-slate-900 dark:text-white placeholder:text-slate-400 font-medium h-auto p-0"
                 autoFocus
               />
@@ -196,8 +224,9 @@ export function BusquedaRapida({
                   return (
                     <div
                       key={producto.id}
-                      onClick={() => { if ((Number(producto.precioVenta) || 0) > 0) handleCopyPrice(producto.precioVenta, producto.nombre); else toast.message('Sin precio de venta', { description: producto.nombre }); }}
-                      className="group relative flex items-center bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-xl border border-slate-200/60 dark:border-slate-800 shadow-sm hover:shadow-xl hover:shadow-pink-500/10 hover:border-pink-300 dark:hover:border-pink-500/50 hover:-translate-y-1 transition-all duration-300 animate-in fade-in slide-in-from-bottom-4 cursor-pointer overflow-hidden"
+                      id={`busq-fila-${index}`}
+                      onClick={() => { setSeleccion(index); setAbierto(a => a === producto.id ? null : producto.id); }}
+                      className={cn("group relative flex flex-col items-stretch bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-xl border border-slate-200/60 dark:border-slate-800 shadow-sm hover:shadow-xl hover:shadow-pink-500/10 hover:border-pink-300 dark:hover:border-pink-500/50 hover:-translate-y-1 transition-all duration-300 animate-in fade-in slide-in-from-bottom-4 cursor-pointer overflow-hidden", index === seleccion && "ring-2 ring-pink-400 dark:ring-pink-500")}
                       style={{ animationDelay: `${Math.min(index * 30, 300)}ms` }}
                     >
                       {/* Efecto hover glass (resplandor izquierdo) */}
@@ -240,6 +269,12 @@ export function BusquedaRapida({
                               {stock} en stock
                             </Badge>
 
+                            {(repetidos.get(normTexto(producto.nombre)) || 0) > 1 && (
+                              <Badge variant="secondary" className="text-[10px] sm:text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-300 border-0">
+                                Repetido
+                              </Badge>
+                            )}
+
                             {(Number(producto.precioVenta) || 0) <= 0 && (
                               <Badge variant="secondary" className="text-[10px] sm:text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300 border-0">
                                 Sin PVP
@@ -270,6 +305,27 @@ export function BusquedaRapida({
                           </div>
                         </div>
                       </div>
+                      {abierto === producto.id && (() => {
+                        const st = getProductoStats(producto);
+                        const mejor = getMejorPrecio(producto.id);
+                        const prov = mejor ? getProveedorById(mejor.proveedorId) : undefined;
+                        return (
+                          <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700 grid grid-cols-2 gap-2 text-sm text-slate-700 dark:text-slate-200 z-10" onClick={e => e.stopPropagation()}>
+                            <div>Stock: <b>{stock}</b></div>
+                            <div>Categoría: <b>{producto.categoria || '—'}</b></div>
+                            {canVerPrecioCosto && <div>Costo: <b>{st.tienePrecio ? formatCurrency(st.mejorCosto) : 'sin dato'}</b></div>}
+                            {canVerMargen && <div>Ganancia: <b>{st.utilidad > 0 ? `${st.utilidad.toFixed(0)}%` : '—'}</b></div>}
+                            {canVerProveedores && <div className="col-span-2">Proveedor: <b>{prov?.nombre || 'sin proveedor'}</b>{st.numProveedores > 1 ? ` (+${st.numProveedores - 1} más)` : ''}</div>}
+                            <button
+                              type="button"
+                              onClick={() => copiarProducto(producto)}
+                              className="col-span-2 mt-1 h-10 rounded-xl bg-pink-600 hover:bg-pink-700 text-white font-bold"
+                            >
+                              Copiar precio
+                            </button>
+                          </div>
+                        );
+                      })()}
                     </div>
                   );
                 })}
@@ -286,7 +342,7 @@ export function BusquedaRapida({
               </span>
               <span className="flex items-center gap-2 text-slate-500 text-sm font-medium">
                 <kbd className="px-2 py-1 bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-700 rounded-md">↵</kbd>
-                Seleccionar
+                Copiar precio
               </span>
               <span className="flex items-center gap-2 text-slate-500 text-sm font-medium">
                 <kbd className="px-2 py-1 bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-700 rounded-md">ESC</kbd>
