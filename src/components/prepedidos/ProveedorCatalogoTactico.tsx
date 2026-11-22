@@ -199,11 +199,8 @@ export function ProveedorCatalogoTactico({
     }, 1000);
   };
 
-  const nombresCategoria = useMemo(() => {
-    const desdeConfig = categorias.map(c => c.nombre).filter(Boolean);
-    if (desdeConfig.length > 0) return desdeConfig;
-    return [...new Set(productos.map(p => p.categoria).filter(Boolean))];
-  }, [categorias, productos]);
+  // Solo categorías creadas por el usuario (nunca las que quedan escritas en productos viejos)
+  const nombresCategoria = useMemo(() => categorias.map(c => c.nombre).filter(Boolean), [categorias]);
 
   const abrirCrearProducto = () => {
     setFormNuevo({
@@ -718,7 +715,10 @@ export function ProveedorCatalogoTactico({
                   {nombresCategoria.map(nombre => <option key={nombre} value={nombre}>{nombre}</option>)}
                 </select>
               ) : (
-                <Input value={formNuevo.categoria} onChange={e => setFormNuevo(f => ({ ...f, categoria: e.target.value }))} placeholder="Categoría" className="h-10 font-bold" />
+                // Sin texto libre: escribir aquí creaba categorías que el usuario no hizo
+                <p className="text-[11px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 rounded-md px-3 py-2">
+                  No hay categorías creadas. Créalas primero en Catálogo → Categorías.
+                </p>
               )}
             </label>
             <div className="grid grid-cols-2 gap-2">

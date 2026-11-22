@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import type { Producto, InventarioItem, MovimientoInventario, Categoria, PrecioProveedor } from '@/types';
 import { hoyLocal } from '@/lib/fecha-local';
+import { categoriaVigente, SIN_CATEGORIA_TXT } from '@/lib/limpiar-categorias';
 
 // ─── Tipos internos ──────────────────────────────────────────────────────────
 
@@ -59,7 +60,8 @@ function PreciosStockTab({ productos, inventario, categorias, formatCurrency }: 
 
     const colorDeCat = (nombre: string) => categorias.find(c => c.nombre === nombre)?.color ?? '#6366f1';
     const stockMap = useMemo(() => new Map(inventario.map(i => [i.productoId, i.stockActual ?? 0])), [inventario]);
-    const catsUnicas = useMemo(() => Array.from(new Set(productos.map(p => p.categoria).filter(Boolean))), [productos]);
+    // Solo categorías creadas por el usuario (2026-11-22): las borradas no vuelven a salir como filtro
+    const catsUnicas = useMemo(() => Array.from(new Set(productos.map(p => categoriaVigente(p.categoria, categorias)))).filter(c => c !== SIN_CATEGORIA_TXT), [productos, categorias]);
 
     const filas = useMemo(() => {
         const norm = (s: string | undefined) => (s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();

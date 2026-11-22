@@ -25,3 +25,17 @@ export function esCategoriaDeReceta(c: unknown): boolean {
 export function preferirPorUsoEnProductos(nueva: string, existente: string, nombresUsados: Set<string>): boolean {
   return nombresUsados.has(String(nueva || '').trim()) && !nombresUsados.has(String(existente || '').trim());
 }
+
+/**
+ * Categoría "vigente" de un producto (2026-11-22, regla de Gonzalo: solo existen las categorías
+ * que él crea). Si el texto del producto no coincide con ninguna categoría creada, devuelve
+ * 'Sin categoría' para que una categoría borrada no reaparezca en filtros, listas ni la hoja impresa.
+ * Si no se conoce la lista de categorías (vacía), devuelve el texto tal cual.
+ */
+export const SIN_CATEGORIA_TXT = 'Sin categoría';
+export function categoriaVigente(nombre: string | undefined, categorias: { nombre: string }[] | undefined): string {
+  const c = String(nombre || '').trim();
+  if (!categorias || categorias.length === 0) return c || SIN_CATEGORIA_TXT;
+  const n = normalizarNombreCat(c);
+  return (n && categorias.find(x => normalizarNombreCat(x.nombre) === n)?.nombre) || SIN_CATEGORIA_TXT;
+}

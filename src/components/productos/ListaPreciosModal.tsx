@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Search, Printer, MessageCircle, Check, RotateCcw, ChevronDown, Undo2, Loader2, X, Sparkles, Lightbulb, ArrowLeft, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Search, Printer, MessageCircle, Check, RotateCcw, ChevronDown, ChevronUp, Undo2, Loader2, X, Sparkles, Lightbulb, ArrowLeft, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { InputPesos } from '@/components/ui/input-pesos';
 import { cn } from '@/lib/utils';
@@ -12,7 +12,7 @@ import {
   armarFilas, agruparPorCategoria, cambiosParaAplicar, textoWhatsApp, htmlImpresion,
   cargarAjustes, guardarAjustes, cargarRespaldo, guardarRespaldo, borrarRespaldo,
   sugerenciaBase, contextoCategoria, preguntaCategoria, leerAnalisisIA, verificarGuardado,
-  AJUSTES_VACIOS, CATEGORIAS_PAN, type AjustesLista, type Respaldo, type Sugerencia, type ModoLista, type Papel,
+  AJUSTES_VACIOS, SIN_CATEGORIA, moverEnLista, type AjustesLista, type Respaldo, type Sugerencia, type ModoLista, type Papel,
 } from '@/lib/lista-precios';
 
 /**
@@ -92,15 +92,19 @@ export function ListaPreciosModal({ isOpen, onOpenChange, productos, onUpdatePro
   useEffect(() => { guardarAjustes(aj); }, [aj]);
   useEffect(() => { if (!isOpen) { setVista('lista'); setResultado(null); } }, [isOpen]);
 
-  const filas = useMemo(() => armarFilas(productos, aj, modo), [productos, aj, modo]);
-  const cambios = useMemo(() => (esVenta ? cambiosParaAplicar(filas) : []), [filas, esVenta]);
-  // Categorías para mover un producto: las del sistema, las que ya usan los productos y las de pan nuevas
+  // Solo las categorías que Gonzalo creó (2026-11-22): un producto con una categoría ya borrada
+  // sale en «Sin categoría» en vez de revivir la borrada en la hoja impresa.
   const opcionesCategoria = useMemo(() => {
-    const s = new Set<string>([...categorias.map(c => (c.nombre || '').trim()), ...productos.map(p => (p.categoria || '').trim()), ...CATEGORIAS_PAN]);
+    const s = new Set<string>(categorias.map(c => (c.nombre || '').trim()));
     s.delete('');
     return Array.from(s).sort((a, b) => a.localeCompare(b, 'es'));
-  }, [categorias, productos]);
+  }, [categorias]);
+  const filas = useMemo(
+    () => armarFilas(productos, aj, modo, opcionesCategoria.length ? opcionesCategoria : undefined),
+    [productos, aj, modo, opcionesCategoria]);
+  const cambios = useMemo(() => (esVenta ? cambiosParaAplicar(filas) : []), [filas, esVenta]);
   const moverCategoria = async (id: string, nombre: string, categoria: string) => {
+    if (!categoria) return;
     try { await onUpdateProducto(id, { categoria }); toast.success(`«${nombre}» quedó en ${categoria}.`); }
     catch { toast.error('No se pudo cambiar la categoría. Intente otra vez.'); }
   };
@@ -137,6 +141,28 @@ export function ListaPreciosModal({ isOpen, onOpenChange, productos, onUpdatePro
   const quitarManual = (id: string) => setAj(a => { const m = { ...a.manuales }; delete m[id]; return { ...a, manuales: m }; });
   const alternarOculto = (id: string) =>
     setAj(a => ({ ...a, ocultos: a.ocultos.includes(id) ? a.ocultos.filter(x => x !== id) : [...a.ocultos, id] }));
+  // Imprimir o no una categoría entera (2026-11-22): si todos están puestos los quita, si no los pone todos
+  const alternarImprimirCategoria = (cat: string) => {
+    const ids = filas.filter(f => f.categoria === cat).map(f => f.id);
+    const todosPuestos = filas.filter(f => f.categoria === cat).every(f => !f.oculto);
+    setAj(a => {
+      const resto = a.ocultos.filter(x => !ids.includes(x));
+      return { ...a, ocultos: todosPuestos ? [...resto, ...ids] : resto };
+    });
+  };
+  const ponerTodosEnLista = (poner: boolean) =>
+    setAj(a => {
+      const ids = filas.map(f => f.id);
+      const resto = a.ocultos.filter(x => !ids.includes(x));
+      return { ...a, ocultos: poner ? resto : [...resto, ...ids] };
+    });
+  // Mover de posición (2026-11-22): categorías completas o productos dentro de su categoría
+  const moverCategoriaPos = (cat: string, dir: -1 | 1) =>
+    setAj(a => ({ ...a, ordenCategorias: moverEnLista(todasCategorias, cat, dir) }));
+  const moverProductoPos = (cat: string, id: string, dir: -1 | 1) => {
+    const ids = filas.filter(f => f.categoria === cat).map(f => f.id);
+    setAj(a => ({ ...a, ordenProductos: { ...a.ordenProductos, [cat]: moverEnLista(ids, id, dir) } }));
+  };
   const alternarCategoria = (cat: string) =>
     setAbiertas(s => { const n = new Set(s); if (n.has(cat)) n.delete(cat); else n.add(cat); return n; });
 
@@ -281,16 +307,28 @@ export function ListaPreciosModal({ isOpen, onOpenChange, productos, onUpdatePro
                 const pct = aj.pctPorCategoria[g.categoria] || 0;
                 const base = sugerenciaBase(g.categoria);
                 const ia = analisis[g.categoria];
+                const filasCat = filas.filter(f => f.categoria === g.categoria);
+                const puestos = filasCat.filter(f => !f.oculto).length;
+                const posCat = todasCategorias.indexOf(g.categoria);
                 return (
-                  <section key={g.categoria} className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
+                  <section key={g.categoria} className={cn('rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden', puestos === 0 && 'opacity-60')}>
                     <div role="button" tabIndex={0} onClick={() => alternarCategoria(g.categoria)}
                       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); alternarCategoria(g.categoria); } }}
-                      className="flex items-center gap-3 p-3 cursor-pointer select-none">
+                      className="flex items-center gap-2 sm:gap-3 p-3 cursor-pointer select-none">
+                      <input type="checkbox" checked={puestos > 0} onClick={e => e.stopPropagation()} onChange={() => alternarImprimirCategoria(g.categoria)}
+                        ref={el => { if (el) el.indeterminate = puestos > 0 && puestos < filasCat.length; }}
+                        aria-label={`Imprimir la categoría ${g.categoria}`} title="Imprimir o no toda la categoría" className="w-5 h-5 accent-orange-600 shrink-0" />
+                      <div className="flex flex-col shrink-0" onClick={e => e.stopPropagation()}>
+                        <button type="button" disabled={!!busqueda || posCat <= 0} onClick={() => moverCategoriaPos(g.categoria, -1)} aria-label={`Subir la categoría ${g.categoria}`} title="Subir categoría"
+                          className="p-0.5 rounded text-slate-500 hover:text-orange-600 disabled:opacity-25"><ChevronUp className="w-4 h-4" /></button>
+                        <button type="button" disabled={!!busqueda || posCat < 0 || posCat >= todasCategorias.length - 1} onClick={() => moverCategoriaPos(g.categoria, 1)} aria-label={`Bajar la categoría ${g.categoria}`} title="Bajar categoría"
+                          className="p-0.5 rounded text-slate-500 hover:text-orange-600 disabled:opacity-25"><ChevronDown className="w-4 h-4" /></button>
+                      </div>
                       <ChevronDown className={cn('w-5 h-5 text-slate-400 transition-transform shrink-0', abierta && 'rotate-180')} />
                       <div className="flex-1 min-w-0">
                         <p className="font-black text-slate-900 dark:text-white truncate">{g.categoria}</p>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
-                          {g.filas.length} productos{esVenta && suben ? ` · ${suben} cambian` : ''}{esVenta ? ` · sugerido ${base.pct}%` : ''}
+                          {g.filas.length} productos{puestos < filasCat.length ? ` · ${puestos} se imprimen` : ''}{esVenta && suben ? ` · ${suben} cambian` : ''}{esVenta ? ` · sugerido ${base.pct}%` : ''}
                         </p>
                       </div>
                       {esVenta && <Porcentaje valor={pct} onCambio={n => ponerPctCategoria(g.categoria, n)} etiqueta={g.categoria} />}
@@ -326,10 +364,17 @@ export function ListaPreciosModal({ isOpen, onOpenChange, productos, onUpdatePro
                         <div className="divide-y divide-slate-100 dark:divide-slate-800">
                           {g.filas.map(f => {
                             const cambia = f.nuevo !== f.actual;
+                            const pos = filasCat.findIndex(x => x.id === f.id);
                             return (
                               <div key={f.id} className={cn('flex items-center gap-2 px-3 py-2', f.oculto && 'opacity-50')}>
                                 <input type="checkbox" checked={!f.oculto} onChange={() => alternarOculto(f.id)} aria-label={`Mostrar ${f.nombre} en la lista`}
                                   title="Quitar o poner en la lista impresa" className="w-4 h-4 accent-orange-600 shrink-0" />
+                                <div className="flex flex-col shrink-0">
+                                  <button type="button" disabled={!!busqueda || pos <= 0} onClick={() => moverProductoPos(g.categoria, f.id, -1)} aria-label={`Subir ${f.nombre}`} title="Subir"
+                                    className="p-0.5 rounded text-slate-500 hover:text-orange-600 disabled:opacity-25"><ChevronUp className="w-4 h-4" /></button>
+                                  <button type="button" disabled={!!busqueda || pos < 0 || pos >= filasCat.length - 1} onClick={() => moverProductoPos(g.categoria, f.id, 1)} aria-label={`Bajar ${f.nombre}`} title="Bajar"
+                                    className="p-0.5 rounded text-slate-500 hover:text-orange-600 disabled:opacity-25"><ChevronDown className="w-4 h-4" /></button>
+                                </div>
                                 <div className="flex-1 min-w-0">
                                   <p className={cn('text-sm font-semibold text-slate-800 dark:text-slate-100 break-words', f.oculto && 'line-through')}>{f.nombre}</p>
                                   <p className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
@@ -338,9 +383,9 @@ export function ListaPreciosModal({ isOpen, onOpenChange, productos, onUpdatePro
                                       {f.nuevo > f.actual ? '+' : '−'}{pesos(Math.abs(f.nuevo - f.actual))}
                                     </span>}
                                   </p>
-                                  <select value={f.categoria} onChange={e => moverCategoria(f.id, f.nombre, e.target.value)} aria-label={`Categoría de ${f.nombre}`}
+                                  <select value={opcionesCategoria.includes(f.categoria) ? f.categoria : ''} onChange={e => moverCategoria(f.id, f.nombre, e.target.value)} aria-label={`Categoría de ${f.nombre}`}
                                     className="mt-1 max-w-full h-7 px-1.5 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-700 dark:text-slate-200">
-                                    {!opcionesCategoria.includes(f.categoria) && <option value={f.categoria}>{f.categoria}</option>}
+                                    {!opcionesCategoria.includes(f.categoria) && <option value="">{f.categoria === SIN_CATEGORIA ? 'Sin categoría — elegir…' : f.categoria}</option>}
                                     {opcionesCategoria.map(c => <option key={c} value={c}>{c}</option>)}
                                   </select>
                                 </div>
@@ -402,8 +447,14 @@ export function ListaPreciosModal({ isOpen, onOpenChange, productos, onUpdatePro
                   <p className="text-xs text-slate-600 dark:text-slate-300">
                     <b>{cambios.length}</b> precios cambian · <b>{filas.length - ocultos}</b> en la lista{ocultos ? ` · ${ocultos} quitados` : ''}
                     {(Object.keys(aj.manuales).length > 0 || Object.values(aj.pctPorCategoria).some(Boolean) || ocultos > 0) && (
-                      <button type="button" onClick={() => { setAj({ ...AJUSTES_VACIOS, protegerHasta: aj.protegerHasta }); setPctTodo(0); }} className="ml-2 underline text-slate-500">Empezar de nuevo</button>
+                      // El orden elegido se conserva al empezar de nuevo
+                      <button type="button" onClick={() => { setAj({ ...AJUSTES_VACIOS, protegerHasta: aj.protegerHasta, ordenCategorias: aj.ordenCategorias, ordenProductos: aj.ordenProductos }); setPctTodo(0); }} className="ml-2 underline text-slate-500">Empezar de nuevo</button>
                     )}
+                    <span className="ml-2 whitespace-nowrap">
+                      <button type="button" onClick={() => ponerTodosEnLista(true)} className="underline font-bold text-slate-700 dark:text-slate-200">Marcar todo</button>
+                      {' · '}
+                      <button type="button" onClick={() => ponerTodosEnLista(false)} className="underline font-bold text-slate-700 dark:text-slate-200">Quitar todo</button>
+                    </span>
                   </p>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <button type="button" onClick={() => setVista('previa')} className="h-11 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold flex items-center justify-center gap-2"><Printer className="w-4 h-4" /> Ver e imprimir</button>

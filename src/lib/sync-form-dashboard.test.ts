@@ -123,7 +123,9 @@ describe('CAPA 2: Proveedores.tsx handleSubmit — sincronización Form → DB',
   });
 
   it('handleSubmit actualiza producto con la categoría del formulario', () => {
-    expect(proveedoresPageSrc).toContain("categoria: item.categoria || 'Otro'");
+    expect(proveedoresPageSrc).toContain('categoria: item.categoria ||');
+    // Regla 2026-11-22: nunca inventar 'Otro' (creaba categorías que el usuario no hizo)
+    expect(proveedoresPageSrc).not.toContain("categoria: item.categoria || 'Otro'");
   });
 });
 

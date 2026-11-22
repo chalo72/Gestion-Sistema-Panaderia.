@@ -100,3 +100,38 @@ describe('lista de precios', () => {
     expect(html).not.toContain('Torta Media');
   });
 });
+
+describe('categorías borradas, qué imprimir y orden (2026-11-22)', () => {
+  const prods = [
+    { id: 'a', nombre: 'Avena', categoria: 'Bebidas', precioVenta: 2500 },
+    { id: 'p', nombre: 'Pula', categoria: 'Bebidas', precioVenta: 1500 },
+    { id: 'c', nombre: 'Coca 250', categoria: 'Cocacola', precioVenta: 1000 }, // categoría ya borrada
+    { id: 'm', nombre: 'Michelada', categoria: 'Micheladas', precioVenta: 9500 },
+  ];
+  const existentes = ['Bebidas', 'Micheladas'];
+
+  it('un producto con categoría borrada sale en «Sin categoría», al final', async () => {
+    const { SIN_CATEGORIA } = await import('./lista-precios');
+    const filas = armarFilas(prods as any, AJUSTES_VACIOS, 'venta', existentes);
+    expect(filas.find(f => f.id === 'c')!.categoria).toBe(SIN_CATEGORIA);
+    expect(filas[filas.length - 1].id).toBe('c');
+    expect(htmlImpresion(filas, 'DP', 'hoy')).not.toContain('Cocacola');
+  });
+
+  it('respeta el orden elegido de categorías y productos', () => {
+    const aj = { ...AJUSTES_VACIOS, ordenCategorias: ['Micheladas', 'Bebidas'], ordenProductos: { Bebidas: ['p', 'a'] } };
+    const ids = armarFilas(prods as any, aj, 'venta', existentes).map(f => f.id);
+    expect(ids.slice(0, 3)).toEqual(['m', 'p', 'a']);
+  });
+
+  it('mover sube y baja un elemento sin salirse de la lista', async () => {
+    const { moverEnLista } = await import('./lista-precios');
+    expect(moverEnLista(['a', 'p', 'x'], 'a', 1)).toEqual(['p', 'a', 'x']);
+    expect(moverEnLista(['a', 'p'], 'a', -1)).toEqual(['a', 'p']);
+  });
+
+  it('los quitados no salen en la hoja impresa', () => {
+    const filas = armarFilas(prods as any, { ...AJUSTES_VACIOS, ocultos: ['a'] }, 'venta', existentes);
+    expect(htmlImpresion(filas, 'DP', 'hoy')).not.toContain('Avena');
+  });
+});

@@ -38,9 +38,12 @@ export interface AjustesLista {
   manuales: Record<string, number>; // id → precio escrito a mano
   ocultos: string[];                // ids quitados de la lista
   protegerHasta: number;            // no subir lo que vale esto o menos (0 = subir todo)
+  /** Orden elegido por Gonzalo (2026-11-22): categorías y productos dentro de cada categoría. */
+  ordenCategorias: string[];
+  ordenProductos: Record<string, string[]>; // categoría → ids en el orden elegido
 }
 
-export const AJUSTES_VACIOS: AjustesLista = { pctPorCategoria: {}, manuales: {}, ocultos: [], protegerHasta: 0 };
+export const AJUSTES_VACIOS: AjustesLista = { pctPorCategoria: {}, manuales: {}, ocultos: [], protegerHasta: 0, ordenCategorias: [], ordenProductos: {} };
 
 /** Precio de venta, no insumo, no basura de prueba. */
 export function entraEnLista(p: ProductoLista): boolean {
@@ -64,7 +67,47 @@ export function precioConPorcentaje(actual: number, pct: number, protegerHasta =
   return Math.max(paso, r);
 }
 
-export const categoriaDe = (p: { categoria?: string }) => (p.categoria || '').trim() || 'Sin categoría';
+export const SIN_CATEGORIA = 'Sin categoría';
+export const categoriaDe = (p: { categoria?: string }) => (p.categoria || '').trim() || SIN_CATEGORIA;
+
+const normCat = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+
+/**
+ * Categoría con la que sale el producto en la lista. Si se pasa la lista de categorías que existen,
+ * un producto con una categoría ya borrada sale en «Sin categoría» (2026-11-22: Gonzalo borró
+ * categorías y seguían saliendo en la hoja impresa porque se tomaban del texto del producto).
+ */
+export function categoriaParaLista(p: { categoria?: string }, existentes?: string[]): string {
+  const c = categoriaDe(p);
+  if (!existentes || c === SIN_CATEGORIA) return c;
+  const n = normCat(c);
+  return existentes.find(e => normCat(e) === n) ?? SIN_CATEGORIA;
+}
+
+/** Ordena según lo que eligió Gonzalo; lo que no tiene orden guardado va después, por nombre. «Sin categoría» al final. */
+export function ordenarFilas(filas: FilaPrecio[], aj: Partial<Pick<AjustesLista, 'ordenCategorias' | 'ordenProductos'>>): FilaPrecio[] {
+  const rangoCat = (c: string) => {
+    const i = (aj.ordenCategorias || []).indexOf(c);
+    return i >= 0 ? i : (c === SIN_CATEGORIA ? 1e9 : 1e6);
+  };
+  const rangoProd = (f: FilaPrecio) => {
+    const i = (aj.ordenProductos?.[f.categoria] || []).indexOf(f.id);
+    return i >= 0 ? i : 1e6;
+  };
+  return [...filas].sort((a, b) =>
+    rangoCat(a.categoria) - rangoCat(b.categoria) || a.categoria.localeCompare(b.categoria, 'es') ||
+    rangoProd(a) - rangoProd(b) || a.nombre.localeCompare(b.nombre, 'es'));
+}
+
+/** Sube (-1) o baja (+1) un elemento en una lista ya ordenada; devuelve la lista completa nueva. */
+export function moverEnLista(lista: string[], item: string, dir: -1 | 1): string[] {
+  const i = lista.indexOf(item);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= lista.length) return lista;
+  const n = [...lista];
+  [n[i], n[j]] = [n[j], n[i]];
+  return n;
+}
 
 /** Insumo con algún valor (costo o precio) para la lista de insumos. */
 export function entraEnInsumos(p: ProductoLista): boolean {
@@ -72,18 +115,18 @@ export function entraEnInsumos(p: ProductoLista): boolean {
   return p.tipo === 'ingrediente' && v > 0 && v < 10_000_000 && !esNombreBasura(p.nombre);
 }
 
-export function armarFilas(productos: ProductoLista[], aj: AjustesLista, modo: ModoLista = 'venta'): FilaPrecio[] {
+export function armarFilas(productos: ProductoLista[], aj: AjustesLista, modo: ModoLista = 'venta', categoriasExistentes?: string[]): FilaPrecio[] {
   const ocultos = new Set(aj.ocultos);
   if (modo === 'insumos') {
-    return productos.filter(entraEnInsumos).map(p => {
+    return ordenarFilas(productos.filter(entraEnInsumos).map(p => {
       const v = Math.round((Number(p.costoBase) || 0) || Number(p.precioVenta));
-      return { id: p.id, nombre: p.nombre.trim().replace(/\s+/g, ' '), categoria: categoriaDe(p), actual: v, nuevo: v, manual: false, oculto: ocultos.has(p.id) };
-    }).sort((a, b) => a.categoria.localeCompare(b.categoria, 'es') || a.nombre.localeCompare(b.nombre, 'es'));
+      return { id: p.id, nombre: p.nombre.trim().replace(/\s+/g, ' '), categoria: categoriaParaLista(p, categoriasExistentes), actual: v, nuevo: v, manual: false, oculto: ocultos.has(p.id) };
+    }), aj);
   }
-  return productos
+  return ordenarFilas(productos
     .filter(entraEnLista)
     .map(p => {
-      const categoria = categoriaDe(p);
+      const categoria = categoriaParaLista(p, categoriasExistentes);
       const actual = Math.round(Number(p.precioVenta));
       const manual = aj.manuales[p.id];
       const tieneManual = typeof manual === 'number' && manual > 0;
@@ -96,8 +139,7 @@ export function armarFilas(productos: ProductoLista[], aj: AjustesLista, modo: M
         manual: tieneManual,
         oculto: ocultos.has(p.id),
       };
-    })
-    .sort((a, b) => a.categoria.localeCompare(b.categoria, 'es') || a.nombre.localeCompare(b.nombre, 'es'));
+    }), aj);
 }
 
 export function agruparPorCategoria(filas: FilaPrecio[]): { categoria: string; filas: FilaPrecio[] }[] {

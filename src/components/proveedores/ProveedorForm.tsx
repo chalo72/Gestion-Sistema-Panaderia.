@@ -181,24 +181,11 @@ const RUBROS = [
   'Carnes y Proteínas', 'Bebidas', 'Limpieza e Higiene', 'Equipamiento', 'Otro',
 ];
 
-const CATEGORIAS_INSUMO = [
-  'Harinas', 'Lácteos', 'Azúcares', 'Huevos', 'Aceites', 
-  'Frutas y Verduras', 'Chocolates', 'Levaduras', 'Esencias', 
-  'Empaques', 'Limpieza', 'Rellenos y Cárnicos', 
-  'Decoración y Coberturas', 'Frutos Secos y Semillas', 
-  'Aditivos y Conservantes', 'Condimentos y Salsas',
-  'Cereales y Granos', 'Utensilios y Despacho', 
-  'Servicios / Varios', 'Otro'
-];
-
-const CATEGORIAS_VENTA = [
-  'Panes', 'Pastelería', 'Repostería', 'Hojaldres', 'Dulces',
-  'Bebidas', 'Micheladas', 'Cafetería', 'Galletería',
-  'Avena y Granola', 'Pasabocas', 'Piñatería', 'Otro'
-];
+// ⛔ Sin listas fijas de categorías: el producto solo puede llevar una categoría
+// que el usuario haya creado (Catálogo → Categorías). Ver CORE_MEMORY 2026-11-22.
 
 const PROD_INIT: Omit<ProductoCatalogo, 'uid' | 'costoUnitario' | 'precioVenta' | 'precioVentaPack'> = {
-  productoId: '', nombre: '', categoria: CATEGORIAS_INSUMO[0],
+  productoId: '', nombre: '', categoria: '',
   precioCosto: 0, margenVenta: 30, cantidadEmbalaje: 1,
   tipoEmbalaje: 'unidad', unidadMedida: 'kg', destino: 'insumo', notas: '',
   stockRecibido: 0,
@@ -228,8 +215,10 @@ export function ProveedorForm({
   // Categorías sincronizadas con el sistema (mismas que ProductFormModal)
   const catInsumoSistema = (categoriasVenta || []).filter(c => c.tipo === 'insumo').map(c => c.nombre);
   const catVentaSistema  = (categoriasVenta || []).filter(c => c.tipo === 'venta' || !c.tipo).map(c => c.nombre);
-  const CATS_INSUMO = catInsumoSistema.length > 0 ? catInsumoSistema : CATEGORIAS_INSUMO;
-  const CATS_VENTA  = catVentaSistema.length  > 0 ? catVentaSistema  : CATEGORIAS_VENTA;
+  // Si no hay categorías de un tipo, se ofrecen todas las del usuario (nunca una lista inventada)
+  const todasCatsSistema = (categoriasVenta || []).map(c => c.nombre);
+  const CATS_INSUMO = catInsumoSistema.length > 0 ? catInsumoSistema : todasCatsSistema;
+  const CATS_VENTA  = catVentaSistema.length  > 0 ? catVentaSistema  : todasCatsSistema;
 
   const [guardando, setGuardando] = useState(false);
   const [isAnalizando, setIsAnalizando] = useState(false);
@@ -780,7 +769,8 @@ export function ProveedorForm({
                 uid: generateUUID(),
                 productoId: '',
                 nombre: p.nombre,
-                categoria: catSug !== 'General' ? catSug : '',
+                // Solo se usa la sugerencia si esa categoría ya existe en la lista del usuario
+                categoria: catSug !== 'General' && [...CATS_INSUMO, ...CATS_VENTA].includes(catSug) ? catSug : '',
                 precioCosto: p.precioCosto,
                 margenVenta: margenOCR,
                 cantidadEmbalaje: cantEmb,

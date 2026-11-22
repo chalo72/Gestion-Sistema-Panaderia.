@@ -235,61 +235,27 @@ export function usePriceControl() {
         // 2026-11-21: también sin tildes, para que "Postobon" y "Postobón" cuenten como una sola.
         const normalizar = normalizarNombreCat;
 
-        // Validar y actualizar categorías si es necesario (comparación normalizada)
-        const categoriasNuevas = CATEGORIAS_DEFAULT.filter(
-          cDef => !finalConfig.categorias.some(c => normalizar(c.nombre) === normalizar(cDef.nombre))
-        );
-        if (categoriasNuevas.length > 0 || finalConfig.categorias.length === 0) {
-          const categoriasActualizadas = finalConfig.categorias.map(catExistente => {
+        // ⛔ REGLA (Gonzalo, 2026-11-22): las categorías SOLO las crea el usuario a mano.
+        // Al cargar NO se crean categorías desde productos/proveedores, NO se re-agregan las
+        // de fábrica que el usuario borró y NO se borra ninguna categoría real automáticamente.
+        // Las de fábrica solo se siembran en un equipo nuevo (lista vacía), sin las borradas.
+        const borradasSet = new Set((finalConfig.categoriasBorradas || []).map(normalizar));
+        if (finalConfig.categorias.length === 0) {
+          finalConfig.categorias = CATEGORIAS_DEFAULT.filter(cDef => !borradasSet.has(normalizar(cDef.nombre)));
+        } else {
+          // Solo completar el ícono de las de fábrica que ya existen (no agrega ninguna)
+          finalConfig.categorias = finalConfig.categorias.map(catExistente => {
             const catDefault = CATEGORIAS_DEFAULT.find(cd => normalizar(cd.nombre) === normalizar(catExistente.nombre));
             return catDefault && !catExistente.icono ? { ...catExistente, icono: catDefault.icono } : catExistente;
           });
-          finalConfig.categorias = [...categoriasActualizadas, ...categoriasNuevas];
         }
 
-        // Limpieza de datos de ejemplo (fantasmas)
-        let prodsFinal = prods;
-        let provsFinal = provs;
-        prodsFinal = prods;
-        provsFinal = provs;
+        const prodsFinal = prods;
+        const provsFinal = provs;
 
-        // [Nexus-Volt] Sincronizar categorías huérfanas de los productos (Autocuración normalizada)
-        // NO crear categoría si el "nombre" es en realidad el nombre de un producto (contaminación).
-        const nombresProductosSet = new Set(prodsFinal.map(p => normalizar(p.nombre || '')).filter(Boolean));
-        const catsDeProductos = Array.from(new Set(prodsFinal.map(p => p.categoria).filter(Boolean)));
-        const catsFaltantes = catsDeProductos.filter((catName) => {
-          if (!catName) return false;
-          if (finalConfig.categorias.some(c => normalizar(c.nombre) === normalizar(catName))) return false;
-          if (nombresProductosSet.has(normalizar(catName))) return false;
-          if (/\(\d|\d{3,}/.test(catName) || catName.length > 45) return false;
-          return true;
-        });
-        if (catsFaltantes.length > 0) {
-          const nuevasCats = catsFaltantes.map(catName => {
-            const esInsumoPorNombre = catName.toUpperCase().startsWith('INS:');
-            const productosEnCat = prodsFinal.filter(p => normalizar(p.categoria || '') === normalizar(catName));
-            const esInsumoPorProductos = productosEnCat.length > 0 && productosEnCat.every(p => p.tipo === 'ingrediente');
-            const tipoDetectado = (esInsumoPorNombre || esInsumoPorProductos) ? 'insumo' as const : 'venta' as const;
-            return {
-              id: generateUUID(),
-              nombre: catName,
-              color: tipoDetectado === 'insumo' ? '#f59e0b' : '#6b7280',
-              tipo: tipoDetectado,
-            };
-          });
-          finalConfig.categorias = [...finalConfig.categorias, ...nuevasCats];
-        }
-
-        // Purgar categorías contaminadas (nombre = nombre de producto) que no son del sistema
-        const NOMBRES_DEF = new Set(CATEGORIAS_DEFAULT.map(c => normalizar(c.nombre)));
-        finalConfig.categorias = finalConfig.categorias.filter((c) => {
-          const n = normalizar(c.nombre || '');
-          if (NOMBRES_DEF.has(n)) return true;
-          if (esCategoriaDeReceta(c)) return false; // receta de pan colada como categoría
-          if (nombresProductosSet.has(n)) return false;
-          if (/\(\d|\d{3,}/.test(c.nombre) || (c.nombre || '').length > 45) return false;
-          return true;
-        });
+        // Única limpieza permitida: registros de RECETA guardados por error como categoría
+        // (traen ingredientes/fórmula); nunca toca una categoría normal del usuario.
+        finalConfig.categorias = finalConfig.categorias.filter((c) => !esCategoriaDeReceta(c));
 
         // ✅ NEXUS-DEDUP FINAL: Deduplicación de categorías con estrategia inteligente
         // - Agrupa por nombre normalizado
@@ -646,24 +612,34 @@ export function usePriceControl() {
       tipo,
     };
     const newCategorias = [...configuracion.categorias, nuevaCategoria];
-    const newConfig = { ...configuracion, categorias: newCategorias };
+    // Si el usuario vuelve a crear a mano una categoría que había borrado, deja de estar "borrada"
+    const nombreNorm = nombre.toLowerCase().trim();
+    const categoriasBorradas = (configuracion.categoriasBorradas || []).filter(n => n.toLowerCase().trim() !== nombreNorm);
+    const newConfig = { ...configuracion, categorias: newCategorias, categoriasBorradas };
     await db.saveConfiguracion({ ...newConfig, id: 'main' });
     setConfiguracion(newConfig);
     return nuevaCategoria;
   }, [configuracion]);
 
   const deleteCategoria = useCallback(async (id: string) => {
+    const borrada = configuracion.categorias.find(c => c.id === id);
     const newCategorias = configuracion.categorias.filter(c => c.id !== id);
-    const newConfig = { ...configuracion, categorias: newCategorias };
+    // Recordar el nombre borrado para que nunca se vuelva a agregar sola al iniciar
+    const categoriasBorradas = borrada?.nombre
+      ? [...new Set([...(configuracion.categoriasBorradas || []), borrada.nombre])]
+      : (configuracion.categoriasBorradas || []);
+    const newConfig = { ...configuracion, categorias: newCategorias, categoriasBorradas };
     await db.saveConfiguracion({ ...newConfig, id: 'main' });
     setConfiguracion(newConfig);
   }, [configuracion]);
 
   const updateCategoria = useCallback(async (id: string, nuevoNombre: string, color: string, tipo?: 'venta' | 'insumo') => {
-    const newCategorias = configuracion.categorias.map(c => 
+    const newCategorias = configuracion.categorias.map(c =>
       c.id === id ? { ...c, nombre: nuevoNombre, color, tipo } : c
     );
-    const newConfig = { ...configuracion, categorias: newCategorias };
+    const nombreNorm = nuevoNombre.toLowerCase().trim();
+    const categoriasBorradas = (configuracion.categoriasBorradas || []).filter(n => n.toLowerCase().trim() !== nombreNorm);
+    const newConfig = { ...configuracion, categorias: newCategorias, categoriasBorradas };
     await db.saveConfiguracion({ ...newConfig, id: 'main' });
     setConfiguracion(newConfig);
   }, [configuracion]);

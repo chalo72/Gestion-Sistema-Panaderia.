@@ -54,6 +54,7 @@ import { ChecklistVitrinaModal } from '@/components/ventas/ChecklistVitrinaModal
 import { encabezadosConClave } from '@/lib/clave-negocio';
 import { hoyLocal } from '@/lib/fecha-local';
 import { conTarjetasDePaquete, idBase, unidadesPorItem, productoDesdeId, lineaVenta } from '@/lib/venta-paquete';
+import { SIN_CATEGORIA } from '@/lib/lista-precios';
 
 import type {
     Producto,
@@ -431,9 +432,14 @@ export function Ventas(props: VentasProps) {
     
     const productosVenta = useMemo(() => {
         const categoriaNorm = (s: string) => safeString(s).toLowerCase().trim();
+        // «Sin categoría» = productos con categoría vacía o ya borrada (2026-11-22)
+        const existentes = new Set(categorias.map(c => categoriaNorm(c.nombre)));
+        const esSinCategoria = selectedCategory?.toLowerCase().trim() === SIN_CATEGORIA.toLowerCase();
         const enCategoria = (p: Producto) =>
             !selectedCategory ||
-            categoriaNorm(p.categoria) === selectedCategory.toLowerCase().trim();
+            (esSinCategoria
+                ? !existentes.has(categoriaNorm(p.categoria))
+                : categoriaNorm(p.categoria) === selectedCategory.toLowerCase().trim());
 
         // Productos que también se venden por paquete salen con una segunda tarjeta "(paquete x48)"
         const catalogo = conTarjetasDePaquete(productos.filter((p) => esProductoBusquedaVenta(p) && enCategoria(p)));
@@ -446,7 +452,7 @@ export function Ventas(props: VentasProps) {
         return deduplicarPorNombre(catalogo).sort((a, b) =>
             (a.nombre || '').localeCompare(b.nombre || '')
         );
-    }, [productos, deferredSearchTerm, selectedCategory]);
+    }, [productos, deferredSearchTerm, selectedCategory, categorias]);
 
     const totalCart = useMemo(() => {
         return cart.reduce((sum, item) => {
