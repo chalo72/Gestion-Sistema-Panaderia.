@@ -12,7 +12,7 @@ import {
   armarFilas, agruparPorCategoria, cambiosParaAplicar, textoWhatsApp, htmlImpresion,
   cargarAjustes, guardarAjustes, cargarRespaldo, guardarRespaldo, borrarRespaldo,
   sugerenciaBase, contextoCategoria, preguntaCategoria, leerAnalisisIA, verificarGuardado,
-  AJUSTES_VACIOS, type AjustesLista, type Respaldo, type Sugerencia,
+  AJUSTES_VACIOS, CATEGORIAS_PAN, type AjustesLista, type Respaldo, type Sugerencia, type ModoLista, type Papel,
 } from '@/lib/lista-precios';
 
 /**
@@ -26,6 +26,7 @@ interface Props {
   onOpenChange: (v: boolean) => void;
   productos: Producto[];
   onUpdateProducto: (id: string, updates: Partial<Producto>) => unknown;
+  categorias?: { nombre: string }[];
   nombreNegocio?: string;
 }
 
@@ -72,7 +73,10 @@ function CajaAnalisis({ titulo, icono, sug, onUsar, tono }: { titulo: string; ic
   );
 }
 
-export function ListaPreciosModal({ isOpen, onOpenChange, productos, onUpdateProducto, nombreNegocio = 'Dulce Placer' }: Props) {
+export function ListaPreciosModal({ isOpen, onOpenChange, productos, onUpdateProducto, categorias = [], nombreNegocio = 'Dulce Placer' }: Props) {
+  const [modo, setModo] = useState<ModoLista>('venta');
+  const [papel, setPapel] = useState<Papel>('oficio');
+  const esVenta = modo === 'venta';
   const [aj, setAj] = useState<AjustesLista>(() => cargarAjustes());
   const [busqueda, setBusqueda] = useState('');
   const [abiertas, setAbiertas] = useState<Set<string>>(new Set());
@@ -88,8 +92,18 @@ export function ListaPreciosModal({ isOpen, onOpenChange, productos, onUpdatePro
   useEffect(() => { guardarAjustes(aj); }, [aj]);
   useEffect(() => { if (!isOpen) { setVista('lista'); setResultado(null); } }, [isOpen]);
 
-  const filas = useMemo(() => armarFilas(productos, aj), [productos, aj]);
-  const cambios = useMemo(() => cambiosParaAplicar(filas), [filas]);
+  const filas = useMemo(() => armarFilas(productos, aj, modo), [productos, aj, modo]);
+  const cambios = useMemo(() => (esVenta ? cambiosParaAplicar(filas) : []), [filas, esVenta]);
+  // Categorías para mover un producto: las del sistema, las que ya usan los productos y las de pan nuevas
+  const opcionesCategoria = useMemo(() => {
+    const s = new Set<string>([...categorias.map(c => (c.nombre || '').trim()), ...productos.map(p => (p.categoria || '').trim()), ...CATEGORIAS_PAN]);
+    s.delete('');
+    return Array.from(s).sort((a, b) => a.localeCompare(b, 'es'));
+  }, [categorias, productos]);
+  const moverCategoria = async (id: string, nombre: string, categoria: string) => {
+    try { await onUpdateProducto(id, { categoria }); toast.success(`«${nombre}» quedó en ${categoria}.`); }
+    catch { toast.error('No se pudo cambiar la categoría. Intente otra vez.'); }
+  };
   const costos = useMemo(() => Object.fromEntries(productos.map(p => [p.id, Number(p.costoBase) || 0])), [productos]);
   const grupos = useMemo(() => {
     const q = normTexto(busqueda);
@@ -99,7 +113,9 @@ export function ListaPreciosModal({ isOpen, onOpenChange, productos, onUpdatePro
   const todasCategorias = useMemo(() => Array.from(new Set(filas.map(f => f.categoria))), [filas]);
   const ocultos = filas.filter(f => f.oculto).length;
   const fechaLista = 'Precios desde el ' + new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-  const htmlPrevia = useMemo(() => (vista === 'previa' ? htmlImpresion(filas, nombreNegocio, fechaLista) : ''), [vista, filas, nombreNegocio, fechaLista]);
+  const htmlPrevia = useMemo(
+    () => (vista === 'previa' ? htmlImpresion(filas, nombreNegocio, esVenta ? fechaLista : 'Costo de compra · ' + new Date().toLocaleDateString('es-CO'), papel, esVenta ? 'Lista de precios' : 'Lista de insumos') : ''),
+    [vista, filas, nombreNegocio, fechaLista, papel, esVenta]);
 
   const ponerPctCategoria = (cat: string, n: number) =>
     setAj(a => ({ ...a, pctPorCategoria: { ...a.pctPorCategoria, [cat]: n } }));
@@ -198,6 +214,14 @@ export function ListaPreciosModal({ isOpen, onOpenChange, productos, onUpdatePro
             <div className="p-4 pr-12 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
               <DialogTitle className="text-xl font-black text-slate-900 dark:text-white">Vista previa de la lista</DialogTitle>
               <DialogDescription className="text-sm text-slate-600 dark:text-slate-300">Así sale en la hoja. Si algo no le gusta, vuelva y cámbielo.</DialogDescription>
+              <div className="mt-2 flex items-center gap-2 text-sm">
+                <span className="font-bold text-slate-700 dark:text-slate-200">Hoja:</span>
+                {(['oficio', 'carta'] as Papel[]).map(p => (
+                  <button key={p} type="button" onClick={() => setPapel(p)} aria-pressed={papel === p}
+                    className={cn('h-8 px-3 rounded-lg border font-bold capitalize', papel === p ? 'bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-900' : 'border-slate-300 text-slate-700 dark:border-slate-600 dark:text-slate-200')}>{p}</button>
+                ))}
+                <span className="text-xs text-slate-500 dark:text-slate-400">En la ventana de imprimir elija el mismo tamaño.</span>
+              </div>
             </div>
             <div className="flex-1 overflow-auto bg-slate-200 dark:bg-slate-800 p-3">
               <iframe ref={previaRef} title="Vista previa de la lista de precios" srcDoc={htmlPrevia}
@@ -218,13 +242,22 @@ export function ListaPreciosModal({ isOpen, onOpenChange, productos, onUpdatePro
                   Suba o baje por categoría, cambie el precio que quiera y quite lo que no va. Nada cambia en Ventas hasta que toque «Pasar a la app».
                 </DialogDescription>
               </div>
+              <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800" role="tablist" aria-label="Qué lista ver">
+                {([['venta', 'Para venta'], ['insumos', 'Insumos']] as [ModoLista, string][]).map(([m, txt]) => (
+                  <button key={m} type="button" role="tab" aria-selected={modo === m} onClick={() => { setModo(m); setResultado(null); setConfirmar(null); }}
+                    className={cn('h-9 rounded-lg text-sm font-black', modo === m ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow' : 'text-slate-600 dark:text-slate-300')}>{txt}</button>
+                ))}
+              </div>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar producto o categoría…" aria-label="Buscar"
                   className="w-full h-11 pl-9 pr-9 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:border-orange-400" />
                 {busqueda && <button type="button" aria-label="Borrar búsqueda" onClick={() => setBusqueda('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400"><X className="w-4 h-4" /></button>}
               </div>
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              {!esVenta && (
+                <p className="text-sm text-slate-600 dark:text-slate-300">Insumos con su costo de compra, para ver e imprimir. Aquí no se cambian precios; sí puede cambiarles la categoría.</p>
+              )}
+              {esVenta && <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Subir todo</span>
                   <Porcentaje valor={pctTodo} onCambio={ponerPctTodo} etiqueta="todo" />
@@ -236,7 +269,7 @@ export function ListaPreciosModal({ isOpen, onOpenChange, productos, onUpdatePro
                 <button type="button" onClick={usarSugerenciasEnTodas} className="h-9 px-3 rounded-lg bg-amber-100 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200 text-sm font-bold flex items-center gap-1.5">
                   <Lightbulb className="w-4 h-4" /> Usar % sugeridos en todo
                 </button>
-              </div>
+              </div>}
             </div>
 
             {/* Lista por categoría */}
@@ -257,14 +290,14 @@ export function ListaPreciosModal({ isOpen, onOpenChange, productos, onUpdatePro
                       <div className="flex-1 min-w-0">
                         <p className="font-black text-slate-900 dark:text-white truncate">{g.categoria}</p>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
-                          {g.filas.length} productos{suben ? ` · ${suben} cambian` : ''} · sugerido {base.pct}%
+                          {g.filas.length} productos{esVenta && suben ? ` · ${suben} cambian` : ''}{esVenta ? ` · sugerido ${base.pct}%` : ''}
                         </p>
                       </div>
-                      <Porcentaje valor={pct} onCambio={n => ponerPctCategoria(g.categoria, n)} etiqueta={g.categoria} />
+                      {esVenta && <Porcentaje valor={pct} onCambio={n => ponerPctCategoria(g.categoria, n)} etiqueta={g.categoria} />}
                     </div>
                     {abierta && (
                       <div className="border-t border-slate-100 dark:border-slate-800">
-                        <div className="p-3 space-y-2 bg-slate-50/60 dark:bg-slate-950/40">
+                        {esVenta && <div className="p-3 space-y-2 bg-slate-50/60 dark:bg-slate-950/40">
                           <CajaAnalisis titulo="Sugerencia de la app" icono={<Lightbulb className="w-4 h-4" />} sug={base} tono="app" onUsar={() => ponerPctCategoria(g.categoria, base.pct)} />
                           {!ia && (
                             <button type="button" onClick={() => analizarConIA(g.categoria, g.filas)}
@@ -289,7 +322,7 @@ export function ListaPreciosModal({ isOpen, onOpenChange, productos, onUpdatePro
                               <span>La IA no respondió: {ia.mensaje} <button type="button" className="underline font-bold" onClick={() => analizarConIA(g.categoria, g.filas)}>Intentar otra vez</button></span>
                             </div>
                           )}
-                        </div>
+                        </div>}
                         <div className="divide-y divide-slate-100 dark:divide-slate-800">
                           {g.filas.map(f => {
                             const cambia = f.nuevo !== f.actual;
@@ -300,15 +333,20 @@ export function ListaPreciosModal({ isOpen, onOpenChange, productos, onUpdatePro
                                 <div className="flex-1 min-w-0">
                                   <p className={cn('text-sm font-semibold text-slate-800 dark:text-slate-100 break-words', f.oculto && 'line-through')}>{f.nombre}</p>
                                   <p className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
-                                    Ahora {pesos(f.actual)}
+                                    {esVenta ? 'Ahora' : 'Costo'} {pesos(f.actual)}
                                     {cambia && <span className={cn('ml-1 font-bold', f.nuevo > f.actual ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400')}>
                                       {f.nuevo > f.actual ? '+' : '−'}{pesos(Math.abs(f.nuevo - f.actual))}
                                     </span>}
                                   </p>
+                                  <select value={f.categoria} onChange={e => moverCategoria(f.id, f.nombre, e.target.value)} aria-label={`Categoría de ${f.nombre}`}
+                                    className="mt-1 max-w-full h-7 px-1.5 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-700 dark:text-slate-200">
+                                    {!opcionesCategoria.includes(f.categoria) && <option value={f.categoria}>{f.categoria}</option>}
+                                    {opcionesCategoria.map(c => <option key={c} value={c}>{c}</option>)}
+                                  </select>
                                 </div>
-                                <InputPesos value={f.nuevo} onValor={n => ponerManual(f.id, n, f.actual)} aria-label={`Precio nuevo ${f.nombre}`}
+                                {!esVenta ? <span className="w-24 text-right font-black tabular-nums text-slate-900 dark:text-white shrink-0">{pesos(f.actual)}</span> : <InputPesos value={f.nuevo} onValor={n => ponerManual(f.id, n, f.actual)} aria-label={`Precio nuevo ${f.nombre}`}
                                   className={cn('w-24 h-10 px-2 text-right rounded-lg border font-black tabular-nums outline-none bg-white dark:bg-slate-800 focus:border-orange-400',
-                                    cambia ? 'border-emerald-400 text-emerald-800 dark:text-emerald-300' : 'border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white')} />
+                                    cambia ? 'border-emerald-400 text-emerald-800 dark:text-emerald-300' : 'border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white')} />}
                                 {f.manual
                                   ? <button type="button" onClick={() => quitarManual(f.id)} aria-label={`Volver al cálculo para ${f.nombre}`} title="Volver al cálculo con %" className="p-1.5 text-slate-400 hover:text-orange-600 shrink-0"><RotateCcw className="w-4 h-4" /></button>
                                   : <span className="w-7 shrink-0" />}
@@ -370,10 +408,10 @@ export function ListaPreciosModal({ isOpen, onOpenChange, productos, onUpdatePro
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <button type="button" onClick={() => setVista('previa')} className="h-11 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold flex items-center justify-center gap-2"><Printer className="w-4 h-4" /> Ver e imprimir</button>
                     <button type="button" onClick={copiarWhatsApp} className="h-11 rounded-xl border border-emerald-300 text-emerald-800 dark:text-emerald-300 font-bold flex items-center justify-center gap-2"><MessageCircle className="w-4 h-4" /> WhatsApp</button>
-                    <button type="button" disabled={!cambios.length} onClick={() => setConfirmar('aplicar')}
+                    {esVenta && <button type="button" disabled={!cambios.length} onClick={() => setConfirmar('aplicar')}
                       className="col-span-2 h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:dark:bg-slate-700 text-white font-black flex items-center justify-center gap-2">
                       <Check className="w-4 h-4" /> Pasar a la app{cambios.length ? ` (${cambios.length})` : ''}
-                    </button>
+                    </button>}
                   </div>
                   {respaldo && (
                     <button type="button" onClick={() => setConfirmar('deshacer')} className="w-full text-sm text-slate-600 dark:text-slate-300 flex items-center justify-center gap-1 py-1">

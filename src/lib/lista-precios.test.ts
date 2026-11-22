@@ -2,6 +2,29 @@ import { describe, it, expect } from 'vitest';
 import { precioConPorcentaje, armarFilas, cambiosParaAplicar, textoWhatsApp, htmlImpresion, AJUSTES_VACIOS,
   familiaDeCategoria, sugerenciaBase, leerAnalisisIA, verificarGuardado, contextoCategoria } from './lista-precios';
 
+describe('insumos e impresión (2026-11-22)', () => {
+  it('la lista de insumos trae solo insumos con su costo', () => {
+    const filas = armarFilas([
+      { id: 'i', nombre: 'Harina', categoria: 'Harinas', precioVenta: 0, costoBase: 98000, tipo: 'ingrediente' },
+      { id: 'v', nombre: 'Pan2000', categoria: 'Panes', precioVenta: 2000 },
+    ] as any, AJUSTES_VACIOS, 'insumos');
+    expect(filas).toHaveLength(1);
+    expect(filas[0]).toMatchObject({ id: 'i', actual: 98000, nuevo: 98000 });
+  });
+  it('la hoja es oficio, nombres en negrita y títulos rojos subrayados', () => {
+    const html = htmlImpresion([{ id: 'a', nombre: 'pan', categoria: 'Alpina', actual: 1, nuevo: 1, manual: false, oculto: false }], 'DP', 'hoy');
+    expect(html).toContain('size: 216mm 330mm');
+    expect(html).toContain('<strong>Pan</strong>');
+    expect(html).toMatch(/h2 \{[^}]*color: #c1121f[^}]*text-decoration: underline/);
+    expect(htmlImpresion([], 'DP', 'hoy', 'carta')).toContain('size: 216mm 279mm');
+  });
+  it('las categorías nuevas de pan cuentan como horno', () => {
+    expect(familiaDeCategoria('Pan de dulce')).toBe('horno');
+    expect(familiaDeCategoria('Pan hojaldrado')).toBe('horno');
+    expect(familiaDeCategoria('Helado preparado')).toBe('helados');
+  });
+});
+
 describe('análisis por categoría', () => {
   it('sabe qué categoría usa horno, nevera o es reventa', () => {
     expect(familiaDeCategoria('Panes')).toBe('horno');
