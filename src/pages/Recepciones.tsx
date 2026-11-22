@@ -44,6 +44,7 @@ import { precioParaRecepcion, describirEmpaque } from '@/lib/precio-recepcion';
 import { empaqueDesdeFormulario, precioProveedorDesdeEmpaque, numeroFormulario } from '@/lib/empaque-producto';
 import { unidadesQueEntran } from '@/lib/venta-paquete';
 import { ultimoCambioPrecio, useCambiosPrecio } from '@/lib/cambio-precio-catalogo';
+import { categoriaVigente, SIN_CATEGORIA_TXT } from '@/lib/limpiar-categorias';
 
 /** "139.990" y "169.980" son pesos colombianos, no decimales. */
 function parsearPesosCol(raw: string): number {
@@ -417,9 +418,10 @@ export default function Recepciones({
 
     // Categorías únicas de productos (para chips del mini POS)
     const categoriasProductos = useMemo(() => {
-        const cats = [...new Set(productos.map(p => p.categoria).filter(Boolean))].sort() as string[];
+        // Solo categorías creadas por el usuario (2026-11-22)
+        const cats = [...new Set(productos.map(p => categoriaVigente(p.categoria, categorias)))].filter(c => c !== SIN_CATEGORIA_TXT).sort() as string[];
         return cats;
-    }, [productos]);
+    }, [productos, categorias]);
 
     // Productos para el panel mini-POS (filtrados por búsqueda + categoría)
     const productosParaPanel = useMemo(() => {
@@ -1856,7 +1858,7 @@ export default function Recepciones({
                             ) : (
                                 /* Modo normal: solo productos DE ESTE PROVEEDOR agrupados por categoría */
                                 (() => {
-                                    const cats = [...new Set(productosAgrupados.delProveedor.map(p => p.categoria).filter(Boolean))] as string[];
+                                    const cats = [...new Set(productosAgrupados.delProveedor.map(p => categoriaVigente(p.categoria, categorias)))] as string[];
                                     // Si solo hay 1 categoría o pocos productos, mostrar directo sin acordeones
                                     if (cats.length <= 1 || productosAgrupados.delProveedor.length <= 12) {
                                         return (
@@ -1879,7 +1881,7 @@ export default function Recepciones({
                                     }
                                     // Muchas categorías: acordeones
                                     return cats.map(cat => {
-                                        const prods = productosAgrupados.delProveedor.filter(p => p.categoria === cat);
+                                        const prods = productosAgrupados.delProveedor.filter(p => categoriaVigente(p.categoria, categorias) === cat);
                                         const isOpen = categoriasExpandidas.has(cat);
                                         return (
                                             <div key={cat} className="rounded-xl border border-slate-100 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-800">

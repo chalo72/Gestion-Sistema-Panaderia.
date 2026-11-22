@@ -11,6 +11,7 @@ import { safeNumber } from '@/lib/safe-utils';
 import { toast } from 'sonner';
 import { esIdPaquete, idBase } from '@/lib/venta-paquete';
 import { ProductAvatar, CategoriaAvatar } from '@/components/ui/ProductAvatar';
+import { SIN_CATEGORIA as SIN_CATEGORIA_POS } from '@/lib/lista-precios';
 
 interface ProductCatalogProps {
     productos: Producto[];
@@ -71,12 +72,16 @@ export function ProductCatalog({
     // Contar productos por categoría (normalizado: lowercase+trim para agrupar variantes)
     const productosPorCategoria = useMemo(() => {
         const counts: Record<string, number> = {};
+        // 2026-11-22: un producto con categoría vacía o ya borrada cuenta en «Sin categoría»
+        // (antes cada categoría borrada salía como mosaico propio: «Cocacola», «Ponys Malta»…)
+        const existentes = new Set(categorias.map(c => c.nombre.toLowerCase().trim()));
         productos.forEach(p => {
-            const key = (p.categoria || '').toLowerCase().trim();
+            const k = (p.categoria || '').toLowerCase().trim();
+            const key = existentes.has(k) ? k : SIN_CATEGORIA_POS.toLowerCase();
             counts[key] = (counts[key] || 0) + 1;
         });
         return counts;
-    }, [productos]);
+    }, [productos, categorias]);
 
     const categoriasConProductos = useMemo(() => {
         const vistas = new Set<string>();
@@ -92,12 +97,13 @@ export function ProductCatalog({
             return false;
         });
 
-        // Mostrar también categorías "huérfanas" que no estaban en la lista de vistas
-        const huerfanas = Object.keys(productosPorCategoria)
-            .filter(key => !vistas.has(key) && (productosPorCategoria[key] || 0) > 0)
-            .map(key => ({ id: `huerfana-${key}`, nombre: key, color: '#6b7280', icono: '📦' } as Categoria));
-            
-        return [...conocidas, ...huerfanas];
+        // Los productos sin categoría válida van juntos en un solo mosaico «Sin categoría»
+        const keySin = SIN_CATEGORIA_POS.toLowerCase();
+        const sinCategoria = !vistas.has(keySin) && (productosPorCategoria[keySin] || 0) > 0
+            ? [{ id: 'sin-categoria', nombre: SIN_CATEGORIA_POS, color: '#6b7280', icono: '📦' } as Categoria]
+            : [];
+
+        return [...conocidas, ...sinCategoria];
     }, [categorias, productosPorCategoria]);
 
     const getCategoryIcon = (catNombre: string) => categorias.find(c => c.nombre.toLowerCase().trim() === catNombre.toLowerCase().trim())?.icono || '📦';

@@ -352,9 +352,10 @@ const Recetas: React.FC<RecetasProps> = ({
 
     // Categorías disponibles para filtrar el selector de producto elaborado
     const categoriasVenta = useMemo(() => {
-        const cats = new Set(productosElaborados.map(p => p.categoria).filter(Boolean));
+        // Solo categorías creadas por el usuario (2026-11-22): las borradas no salen como filtro
+        const cats = new Set(productosElaborados.map(p => p.categoria).filter(c => c && (catTipoMap.size === 0 || catTipoMap.has(c))));
         return Array.from(cats).sort() as string[];
-    }, [productosElaborados]);
+    }, [productosElaborados, catTipoMap]);
 
     // Productos elaborados filtrados por categorías seleccionadas por el usuario
     const productosElaboradosFiltrados = useMemo(() => {

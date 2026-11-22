@@ -655,7 +655,7 @@ export function ProductFormModal({
                                     </Label>
                                     <div className="relative">
                                         <Input
-                                            type="number" min="0" max="999" step="1"
+                                            type="number" min="0" max="999" step="0.1"
                                             value={formData.margenUtilidad}
                                             onChange={e => {
                                                 const newMargen = e.target.value;

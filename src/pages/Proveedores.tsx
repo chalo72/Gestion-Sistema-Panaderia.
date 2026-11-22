@@ -97,12 +97,7 @@ const EMBALAJES: { value: TipoEmbalaje; label: string; emoji: string; desc: stri
   { value: 'otro',    label: 'Otro',     emoji: '🔖', desc: 'Tipo personalizado'         },
 ];
 
-const CATEGORIAS_PROD = [
-  'Harinas y Materia Prima', 'Azúcares y Endulzantes', 'Lácteos y Huevos',
-  'Levaduras y Aditivos', 'Aceites y Grasas', 'Frutas y Verduras',
-  'Carnes y Embutidos', 'Bebidas', 'Empaques y Desechables',
-  'Condimentos y Salsas', 'Granos y Semillas', 'Otro',
-];
+// ⛔ Sin lista fija de categorías: solo las que crea el usuario (CORE_MEMORY 2026-11-22)
 
 // Componentes auxiliares fuera del componente principal para evitar remount en cada render
 function ProveedorAvatar({ proveedor, size = 'md' }: { proveedor: Proveedor; size?: 'sm' | 'md' | 'lg' }) {
@@ -321,16 +316,6 @@ export function Proveedores({
   }>>([]);
   const [necesitaRecargar, setNecesitaRecargar] = useState(false);
 
-  /* ─── Categorías reales desde Configuración (fallback si un producto no trae categoría) ─── */
-  const [categoriasConfig, setCategoriasConfig] = useState<string[]>([]);
-  useEffect(() => {
-    db.getConfiguracion()
-      .then(config => {
-        const nombres = (config?.categorias || []).map((c: any) => c?.nombre).filter(Boolean);
-        if (nombres.length > 0) setCategoriasConfig(nombres);
-      })
-      .catch(() => {}); // Si falla, se sigue usando el fallback fijo de abajo
-  }, []);
 
   const buscarProveedoresEliminados = useCallback(async () => {
     setBuscandoEliminados(true);
@@ -725,7 +710,7 @@ export function Proveedores({
               const tipo: ProductoTipo = item.destino === 'venta' ? 'elaborado' : 'ingrediente';
               const np = await onAddProducto({
                 nombre: item.nombre,
-                categoria: item.categoria || 'Otro',
+                categoria: item.categoria || '', // sin categoría si no se eligió (antes 'Otro' creaba categoría fantasma)
                 descripcion: descripcionGenerada,
                 precioVenta: redondearPrecio(item.precioVenta),
                 margenUtilidad: Number(item.margenVenta) || 30,
@@ -762,7 +747,7 @@ export function Proveedores({
                 tipo,
                 updatedAt: new Date().toISOString(),
                 ...(!esCompartido && {
-                  categoria: item.categoria || 'Otro',
+                  categoria: item.categoria || getProductoById(productoId)?.categoria || '',
                   costoBase: Math.round(Number(item.costoUnitario) || 0),
                   margenUtilidad: Number(item.margenVenta) || 30,
                   precioVenta: redondearPrecio(item.precioVenta),
@@ -820,7 +805,7 @@ export function Proveedores({
         uid: precio.id,
         productoId: precio.productoId,
         nombre: prod?.nombre || 'Producto eliminado',
-        categoria: prod?.categoria || categoriasConfig[0] || CATEGORIAS_PROD[0],
+        categoria: prod?.categoria || '',
         precioCosto: precio.precioCosto,
         margenVenta: margenCalc,
         cantidadEmbalaje: cantEmb,

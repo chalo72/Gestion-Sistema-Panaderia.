@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { Producto, Categoria } from '@/types';
 import { hoyLocal } from '@/lib/fecha-local';
+import { categoriaVigente, SIN_CATEGORIA_TXT } from '@/lib/limpiar-categorias';
 
 interface ListaPreciosProvincialProps {
     productos?: Producto[];
@@ -90,8 +91,9 @@ export default function ListaPreciosProvincial({
 
     // ── Categorías únicas desde productos reales ─────────────────────────
     const catsUnicas = useMemo(() =>
-        Array.from(new Set(productosConStock.map(p => p.categoria).filter(Boolean))),
-        [productosConStock]);
+        // Solo categorías creadas por el usuario (2026-11-22)
+        Array.from(new Set(productosConStock.map(p => categoriaVigente(p.categoria, categoriasObj)))).filter(c => c !== SIN_CATEGORIA_TXT),
+        [productosConStock, categoriasObj]);
 
     // ── Filtrado + ordenamiento ───────────────────────────────────────────
     const filtrados = useMemo(() => {

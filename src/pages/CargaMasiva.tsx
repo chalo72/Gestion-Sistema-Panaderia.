@@ -40,8 +40,6 @@ interface CargaMasivaProps {
 type TabType = 'factura' | 'excel';
 type ImportState = 'idle' | 'processing' | 'preview' | 'saving' | 'done';
 
-// Colores para categorías nuevas
-const COLORES_CATEGORIA = ['#3b82f6', '#ec4899', '#22c55e', '#f59e0b', '#8b5cf6', '#14b8a6', '#ef4444', '#f97316'];
 
 export default function CargaMasiva({
   productos,
@@ -49,7 +47,6 @@ export default function CargaMasiva({
   categorias,
   onAddProducto,
   onAddProveedor,
-  onAddCategoria,
   onAddOrUpdatePrecio,
   formatCurrency,
 }: CargaMasivaProps) {
@@ -274,25 +271,20 @@ export default function CargaMasiva({
       // Usar la variable para evitar warning de variable no utilizada
       void (newProveedorId);
       
-      // Crear categorías nuevas
-      const categoriasNuevas = new Set<string>();
+      // ⛔ Ya NO se crean categorías solas (regla de Gonzalo, 2026-11-22). Si el archivo trae
+      // una categoría que no existe, el producto queda sin categoría y se avisa cuáles faltan.
+      const categoriaExistente = (nombre?: string) => {
+        const n = (nombre || '').toLowerCase().trim();
+        return n ? (categorias.find(c => c.nombre.toLowerCase().trim() === n)?.nombre || '') : '';
+      };
+      const categoriasFaltantes = new Set<string>();
       const items = activeTab === 'factura' ? productosDetectados : filasImportadas;
-      
       for (const item of items) {
         const categoria = 'categoria' in item ? item.categoria : '';
-        if (categoria && !categorias.find(c => c.nombre.toLowerCase() === categoria.toLowerCase())) {
-          categoriasNuevas.add(categoria);
-        }
+        if (categoria && !categoriaExistente(categoria)) categoriasFaltantes.add(categoria);
       }
-      
-      for (const nombreCat of Array.from(categoriasNuevas)) {
-        try {
-          const colorIndex = Array.from(categoriasNuevas).indexOf(nombreCat) % COLORES_CATEGORIA.length;
-          const color = COLORES_CATEGORIA[colorIndex];
-          await onAddCategoria(nombreCat, color, 'insumo');
-        } catch (err) {
-          console.error('Error creando categoría:', err);
-        }
+      if (categoriasFaltantes.size > 0) {
+        toast.warning(`Estas categorías no existen y no se crearon: ${Array.from(categoriasFaltantes).join(', ')}. Esos productos quedan sin categoría; créalas en Catálogo si las necesitas.`, { duration: 9000 });
       }
       
       // Guardar productos
@@ -309,7 +301,7 @@ export default function CargaMasiva({
             // Guardar o identificar producto
             const productoCreado = await onAddProducto({
               nombre: prod.nombre,
-              categoria: prod.categoria || 'General',
+              categoria: categoriaExistente(prod.categoria),
               descripcion: prod.descripcion,
               precioVenta: Math.round(prod.precioUnitario * 1.3 / 100) * 100, // Margen 30%
               margenUtilidad: 30,
@@ -350,7 +342,7 @@ export default function CargaMasiva({
           try {
             await onAddProducto({
               nombre: fila.nombre,
-              categoria: fila.categoria || 'General',
+              categoria: categoriaExistente(fila.categoria),
               descripcion: fila.descripcion,
               precioVenta: Math.round((fila.precioUnitario || fila.costoCompra * 1.3) / 100) * 100,
               margenUtilidad: 30,
