@@ -1,5 +1,39 @@
 import { describe, it, expect } from 'vitest';
-import { precioConPorcentaje, armarFilas, cambiosParaAplicar, textoWhatsApp, htmlImpresion, AJUSTES_VACIOS } from './lista-precios';
+import { precioConPorcentaje, armarFilas, cambiosParaAplicar, textoWhatsApp, htmlImpresion, AJUSTES_VACIOS,
+  familiaDeCategoria, sugerenciaBase, leerAnalisisIA, verificarGuardado, contextoCategoria } from './lista-precios';
+
+describe('análisis por categoría', () => {
+  it('sabe qué categoría usa horno, nevera o es reventa', () => {
+    expect(familiaDeCategoria('Panes')).toBe('horno');
+    expect(familiaDeCategoria('Pan empacado')).toBe('horno');
+    expect(familiaDeCategoria('Fritos')).toBe('horno');
+    expect(familiaDeCategoria('Tortas Decoradas')).toBe('tortas');
+    expect(familiaDeCategoria('Helado Empaque')).toBe('helados');
+    expect(familiaDeCategoria('Postobón')).toBe('reventa');
+    expect(familiaDeCategoria('Alpina')).toBe('reventa');
+    expect(familiaDeCategoria('Papelería')).toBe('reventa');
+    expect(sugerenciaBase('Panes').pct).toBe(7);
+    expect(sugerenciaBase('Cocacola').pct).toBe(0);
+  });
+
+  it('lee el JSON de la IA aunque venga con texto alrededor, y rechaza basura', () => {
+    expect(leerAnalisisIA('Claro:\n{"pct": 6, "porque": "gas", "paraQue": "cubrir", "razon": "640.000"}\nlisto'))
+      .toEqual({ pct: 6, porque: 'gas', paraQue: 'cubrir', razon: '640.000' });
+    expect(leerAnalisisIA('ESTADO: bien')).toBeNull();
+    expect(leerAnalisisIA('{"pct": 90, "porque": "x"}')).toBeNull();
+  });
+
+  it('los datos para la IA solo traen precios y costos reales', () => {
+    const ctx = contextoCategoria('Panes', [{ id: 'a', nombre: 'Pan2000', categoria: 'Panes', actual: 2000, nuevo: 2000, manual: false, oculto: false }], { a: 900 });
+    expect(ctx).toContain('Pan2000: $2000 (costo $900)');
+    expect(ctx).toContain('$1.300.000');
+  });
+
+  it('confirma lo guardado comparando producto por producto', () => {
+    expect(verificarGuardado([{ id: 'a', nuevo: 3200 }, { id: 'b', nuevo: 2100 }], [{ id: 'a', precioVenta: 3200 }, { id: 'b', precioVenta: 2000 }]))
+      .toEqual({ ok: 1, total: 2, fallaron: ['b'] });
+  });
+});
 
 const prods = [
   { id: 'a', nombre: 'Pan aliñado empacado', categoria: 'Pan empacado', precioVenta: 3000 },
