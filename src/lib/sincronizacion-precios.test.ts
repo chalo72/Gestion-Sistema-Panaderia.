@@ -152,7 +152,7 @@ describe('CAPA 4: Proveedores.tsx sincroniza con módulo de productos', () => {
   });
 
   it('handleSubmit actualiza producto con precioVenta redondeado del formulario', () => {
-    expect(proveedoresSrc).toContain('precioVenta: Math.round(Number(item.precioVenta) || 0)');
+    expect(proveedoresSrc).toContain('precioVenta: redondearPrecio(item.precioVenta)');
   });
 
   it('handleSubmit actualiza producto con margenUtilidad', () => {

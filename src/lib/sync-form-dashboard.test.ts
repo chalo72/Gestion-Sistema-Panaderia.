@@ -70,7 +70,7 @@ describe('CAPA 1: ProveedorForm — datos completos en ProductoCatalogo', () => 
   });
 
   it('addProductoCatalogo redondea precioVenta a peso (sin pérdida COP)', () => {
-    expect(proveedorFormSrc).toContain('precioVenta: Math.round(sellPrice)');
+    expect(proveedorFormSrc).toContain('precioVenta: redondearPrecio(sellPrice)');
   });
 
   it('handleSave llama onSubmit con formData e items guardados', () => {
@@ -111,7 +111,7 @@ describe('CAPA 2: Proveedores.tsx handleSubmit — sincronización Form → DB',
   });
 
   it('handleSubmit actualiza producto con precioVenta del formulario (redondeado COP)', () => {
-    expect(proveedoresPageSrc).toContain('precioVenta: Math.round(Number(item.precioVenta) || 0)');
+    expect(proveedoresPageSrc).toContain('precioVenta: redondearPrecio(item.precioVenta)');
   });
 
   it('handleSubmit actualiza producto con costoBase unitario', () => {

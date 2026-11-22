@@ -32,6 +32,7 @@ import { HistorialCajasDia } from '@/components/caja/HistorialCajasDia';
 import { enviarReporteZWhatsApp } from '@/lib/whatsapp-reporting';
 import type { CajaSesion, Venta, Categoria, Producto, PrestamoEntreCajas } from '@/types';
 import { ymdLocal, hoyLocal } from '@/lib/fecha-local';
+import { InputPesos } from '@/components/ui/input-pesos';
 
 const BILLETES = [
     { valor: 100000, label: '$100.000', color: 'bg-purple-100 border-purple-200 text-purple-700' },
@@ -117,7 +118,7 @@ function EntregaTurnoModal({ caja, isOpen, onClose, onConfirmar, formatCurrency 
             <DialogContent className="max-w-md rounded-3xl p-0 border-none shadow-2xl bg-white dark:bg-slate-900 overflow-hidden">
 
                 {/* ── Header con identidad de la caja ── */}
-                <div className="bg-slate-900 px-6 pt-6 pb-5 relative overflow-hidden">
+                <div className="text-white bg-slate-900 px-6 pt-6 pb-5 relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-3xl -mr-16 -mt-16" />
                     <div className="relative z-10 flex items-center gap-4">
                         <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center border border-white/10 text-3xl shrink-0">
@@ -525,11 +526,11 @@ function CierreJornadaModal({ cajas, isOpen, onClose, onConfirmar, formatCurrenc
                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Efectivo entregado</p>
                         <div className="relative">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-black text-slate-400">$</span>
-                            <input
-                                type="number" min="0"
+                            <InputPesos
+                                aria-label="Monto de la caja"
                                 placeholder="$0"
                                 value={montos[cajaId] ?? ''}
-                                onChange={e => setMontos(prev => ({ ...prev, [cajaId]: e.target.value }))}
+                                onValor={n => setMontos(prev => ({ ...prev, [cajaId]: n > 0 ? String(n) : '' }))}
                                 className="w-full h-11 pl-7 pr-3 text-lg font-black rounded-xl border-2 border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 outline-none focus:border-indigo-400 tabular-nums transition-all"
                             />
                         </div>
@@ -557,7 +558,7 @@ function CierreJornadaModal({ cajas, isOpen, onClose, onConfirmar, formatCurrenc
         <Dialog open={isOpen} onOpenChange={loading ? undefined : onClose}>
             <DialogContent className="max-w-2xl rounded-2xl p-0 border-none shadow-2xl bg-white dark:bg-slate-900 max-h-[92vh] flex flex-col overflow-hidden">
                 {/* Header */}
-                <DialogHeader className="bg-slate-900 p-5 shrink-0">
+                <DialogHeader className="text-white bg-slate-900 p-5 shrink-0">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
                             <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center border border-white/10">
@@ -3012,7 +3013,7 @@ export function ControlCaja({
             {/* Modal Trazas */}
             <Dialog open={showTracesModal} onOpenChange={setShowTracesModal}>
                 <DialogContent className="max-w-lg rounded-2xl p-0 overflow-hidden border-none shadow-2xl bg-white dark:bg-slate-900">
-                    <DialogHeader className="bg-slate-900 p-5 flex flex-col items-center text-center">
+                    <DialogHeader className="text-white bg-slate-900 p-5 flex flex-col items-center text-center">
                         <div className="w-11 h-11 bg-white/10 rounded-xl flex items-center justify-center mb-3 border border-white/10">
                             <Search className="w-5 h-5 text-white" />
                         </div>
@@ -3054,7 +3055,7 @@ export function ControlCaja({
             {/* ══ MODAL VER / EDITAR CUADRE DE CAJA ══ */}
             <Dialog open={cuadreModal.isOpen} onOpenChange={open => { if (!open) setCuadreModal(prev => ({ ...prev, isOpen: false, sesion: null })); }}>
                 <DialogContent className="max-w-md rounded-2xl p-0 border-none shadow-2xl bg-white dark:bg-slate-900 overflow-hidden">
-                    <DialogHeader className="bg-slate-900 p-5">
+                    <DialogHeader className="text-white bg-slate-900 p-5">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <div className={cn(
@@ -3288,7 +3289,7 @@ export function ControlCaja({
             {/* ══ MODAL EDITAR CAJA ══ */}
             <Dialog open={!!editandoCaja} onOpenChange={() => setEditandoCaja(null)}>
                 <DialogContent className="max-w-sm rounded-2xl p-0 border-none shadow-2xl bg-white dark:bg-slate-900">
-                    <DialogHeader className="bg-slate-900 p-5">
+                    <DialogHeader className="text-white bg-slate-900 p-5">
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center border border-white/10">
                                 <Store className="w-5 h-5 text-white" />

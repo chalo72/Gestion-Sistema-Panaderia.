@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { db } from '@/lib/database';
 import { dbNube } from '@/lib/nube-kv';
 import { EquipoTurnoSelector, cargarCandidatas, type CandidataTurno } from '@/components/ventas/EquipoTurnoModal';
+import { InputPesos } from '@/components/ui/input-pesos';
 import {
     equipoVigente, fechaHoy, guardarEquipo, leerEquipoLocal, nombreEquipo, turnoPorHora,
 } from '@/lib/equipo-turno';
@@ -620,7 +621,7 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir, cajasAbiertasNombr
                                     <div className="absolute left-4 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg bg-slate-50 dark:bg-slate-800 text-blue-600 flex items-center justify-center group-focus-within:bg-blue-600 group-focus-within:text-white transition-all">
                                         <DollarSign className="w-5 h-5" />
                                     </div>
-                                    <input type="number" value={montoGlobal || ''} onChange={e => setMontoGlobal(parseFloat(e.target.value) || 0)}
+                                    <InputPesos aria-label="Base de apertura" value={montoGlobal} onValor={setMontoGlobal}
                                         className="w-full h-14 pl-16 pr-5 text-2xl font-black text-slate-900 dark:text-white rounded-xl bg-slate-50 dark:bg-slate-900 border-2 border-transparent focus:border-blue-600/30 focus:bg-white dark:focus:bg-slate-800 transition-all outline-none tabular-nums"
                                         placeholder="0" />
                                 </div>
@@ -673,7 +674,7 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir, cajasAbiertasNombr
                                                 {!usarMontoGlobal && incluida && (
                                                     <div className="flex items-center gap-1 shrink-0">
                                                         <span className="text-[10px] text-slate-400 font-bold">$</span>
-                                                        <input type="number" value={cfg.montoApertura || ''} onChange={e => setMontoCaja(caja.nombre, parseFloat(e.target.value) || 0)}
+                                                        <InputPesos aria-label={`Base ${caja.nombre}`} value={cfg.montoApertura} onValor={n => setMontoCaja(caja.nombre, n)}
                                                             className="w-20 h-8 px-2 text-sm font-black text-slate-900 dark:text-white text-right rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 outline-none focus:border-blue-300 tabular-nums"
                                                             placeholder="0" />
                                                     </div>

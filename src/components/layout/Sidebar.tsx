@@ -541,7 +541,7 @@ export const Sidebar = React.memo(function Sidebar({
   if (isMobile) {
     return (
       <Sheet open={isMobileMenuOpen} onOpenChange={onMobileMenuOpenChange}>
-        <SheetContent side="left" className="p-0 bg-slate-950 border-r border-slate-800/60 w-[300px] flex flex-col">
+        <SheetContent side="left" className="text-white p-0 bg-slate-950 border-r border-slate-800/60 w-[300px] flex flex-col">
           {/* Header */}
           <div className="flex-none p-4 border-b border-white/10 bg-gradient-to-r from-slate-900 to-slate-950">
             <div className="flex items-center gap-3">

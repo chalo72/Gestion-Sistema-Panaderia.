@@ -24,6 +24,7 @@ import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { opcionesPersonaFamilia } from '@/lib/familia-duenos';
 import type { Gasto, GastoCategoria, MetodoPago, Proveedor } from '@/types';
+import { InputPesos } from '@/components/ui/input-pesos';
 
 // ── Métodos de pago visuales ──────────────────────────────────────────────────
 const METODOS = [
@@ -211,17 +212,16 @@ export function ExpenseFormModal({
                                     'absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4',
                                     esIngreso ? 'text-emerald-500' : 'text-rose-500'
                                 )} />
-                                <Input
-                                    type="number"
+                                <InputPesos
+                                    aria-label="Monto"
                                     value={formData.monto || ''}
-                                    onChange={e => {
-                                        const m = parseFloat(e.target.value) || 0;
+                                    onValor={m => {
                                         const q = (formData as any).cantidad || 1;
                                         setFormData((formData as any).productoLibre
                                             ? ({ ...formData, monto: m, precioUnitario: m / q } as any)
                                             : { ...formData, monto: m });
                                     }}
-                                    className="h-11 pl-9 rounded-xl border border-slate-200 dark:border-slate-700 font-black tabular-nums text-base"
+                                    className="w-full h-11 pl-9 pr-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 outline-none focus:border-slate-400 font-black tabular-nums text-base"
                                     placeholder="0"
                                     readOnly={(formData.facturaItems?.length ?? 0) > 0}
                                 />

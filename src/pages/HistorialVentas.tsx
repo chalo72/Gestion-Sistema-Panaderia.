@@ -1940,7 +1940,7 @@ export default function HistorialVentas({
             {/* Modal de Detalle Maestro Antigravity */}
             <Dialog open={showDetailModal} onOpenChange={setShowDetailModal}>
                 <DialogContent className="max-w-2xl rounded-[3rem] p-0 overflow-hidden border-none shadow-3xl bg-white dark:bg-slate-950">
-                    <DialogHeader className="bg-[#0f172a] p-8 text-center relative overflow-hidden">
+                    <DialogHeader className="text-white bg-[#0f172a] p-8 text-center relative overflow-hidden">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl -mr-16 -mt-16" />
 
                         <div className="relative z-10 flex flex-col items-center">

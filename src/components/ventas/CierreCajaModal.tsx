@@ -8,6 +8,7 @@ import {
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { CajaSesion, Mesa, PedidoActivo } from '@/types';
+import { InputPesos } from '@/components/ui/input-pesos';
 
 const BILLETES_CIERRE = [
     { valor: 100000, label: '$100.000', color: 'bg-purple-100 border-purple-200 text-purple-700' },
@@ -127,7 +128,7 @@ export function CierreCajaModal({ isOpen, onClose, onCerrar, cajaActiva, formatC
             <DialogContent className="max-w-2xl rounded-3xl p-0 border-none shadow-2xl bg-white dark:bg-slate-950 overflow-hidden">
 
                 {/* ── HEADER ── */}
-                <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-6 relative overflow-hidden">
+                <div className="text-white bg-gradient-to-br from-slate-900 to-slate-800 p-6 relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl -mr-24 -mt-24" />
                     <div className="absolute bottom-0 left-0 w-32 h-32 bg-purple-500/10 rounded-full blur-2xl -ml-16 -mb-16" />
                     <div className="relative z-10">
@@ -208,12 +209,12 @@ export function CierreCajaModal({ isOpen, onClose, onCerrar, cajaActiva, formatC
                             <DollarSign className="w-3.5 h-3.5" />
                             {sinVentasPos ? 'No hubo ventas por POS hoy — escribe el total vendido' : 'Ventas de hoy (si no se usó POS)'}
                         </label>
-                        <input
-                            type="number" min="0"
+                        <InputPesos
+                            aria-label="Ventas de hoy"
                             className="w-full h-11 px-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-black text-base focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400/20 transition-all"
                             placeholder={cajaActiva?.totalVentas ? formatCurrency(cajaActiva.totalVentas) : '0'}
                             value={ventasManualStr}
-                            onChange={e => setVentasManualStr(e.target.value)}
+                            onValor={n => setVentasManualStr(n > 0 ? String(n) : '')}
                         />
                         <p className="text-[10px] text-slate-400 mt-1.5">
                             {ventasManualNum > 0

@@ -22,6 +22,7 @@ import { ProductCategoryManager } from '@/components/productos/ProductCategoryMa
 import { ProductPriceItem } from '@/components/productos/ProductPriceItem';
 import { IceCreamAssistantModal } from '@/components/productos/IceCreamAssistantModal';
 import { BeverageAssistantModal } from '@/components/productos/BeverageAssistantModal';
+import { ListaPreciosModal } from '@/components/productos/ListaPreciosModal';
 import { db } from '@/lib/database';
 import { empaqueDesdeFormulario, precioProveedorDesdeEmpaque, camposEmpaqueParaEditar, numeroFormulario } from '@/lib/empaque-producto';
 
@@ -64,6 +65,7 @@ export default function Productos({
     sesionesCaja = [], gastos = [],
 }: ProductosProps) {
     const [isOrdenarPanesOpen, setIsOrdenarPanesOpen] = useState(false);
+    const [isListaPreciosOpen, setIsListaPreciosOpen] = useState(false); // 2026-11-21: subir/bajar precios e imprimir
     const panesPorOrdenar = useMemo(
         () => planOrdenPanes(productos, modelosPan, formulaciones).pendientes,
         [productos, modelosPan, formulaciones]
@@ -296,6 +298,22 @@ export default function Productos({
                         <p className="text-xs text-amber-600 mt-0.5">{panesPorOrdenar} pan{panesPorOrdenar === 1 ? '' : 'es'} de tus Modelos de pan (Recetas) sin su categoría en el catálogo. Sepáralos en Pan de sal, Pan de dulce, Croissant…</p>
                     </div>
                     <span className="ml-auto text-xs font-black text-amber-700 bg-amber-100 px-3 py-1.5 rounded-xl">Ordenar →</span>
+                </button>
+            )}
+
+            {/* Lista de precios: subir o bajar por %, imprimir para las vendedoras (2026-11-21) */}
+            {check('EDITAR_PRECIOS') && (
+                <button
+                    type="button"
+                    onClick={() => setIsListaPreciosOpen(true)}
+                    className="w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl border-2 border-emerald-300 dark:border-emerald-800 bg-emerald-50/70 dark:bg-emerald-900/10 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-all text-left"
+                >
+                    <span className="text-2xl">🏷️</span>
+                    <div>
+                        <p className="text-sm font-black text-emerald-800 dark:text-emerald-300">Lista de precios</p>
+                        <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-0.5">Subir o bajar precios por categoría, cambiarlos a mano e imprimir la lista para las vendedoras</p>
+                    </div>
+                    <span className="ml-auto text-xs font-black text-emerald-800 bg-emerald-100 dark:bg-emerald-900 dark:text-emerald-200 px-3 py-1.5 rounded-xl">Abrir →</span>
                 </button>
             )}
 
@@ -587,6 +605,13 @@ export default function Productos({
                 formatCurrency={formatCurrency}
                 sesionesCaja={sesionesCaja}
                 gastos={gastos}
+            />
+
+            <ListaPreciosModal
+                isOpen={isListaPreciosOpen}
+                onOpenChange={setIsListaPreciosOpen}
+                productos={productos}
+                onUpdateProducto={onUpdateProducto}
             />
 
             <BeverageAssistantModal
