@@ -14,7 +14,14 @@ export interface ProductoLista {
   categoria?: string;
   precioVenta: number;
   tipo?: string;
+  costoBase?: number;
 }
+
+/** Qué lista se arma: lo de venta (con precios editables) o los insumos (solo para ver e imprimir su costo). */
+export type ModoLista = 'venta' | 'insumos';
+
+/** Categorías de pan que Gonzalo quiere separar (2026-11-22). */
+export const CATEGORIAS_PAN = ['Pan de dulce', 'Pan de sal', 'Pan hojaldrado'];
 
 export interface FilaPrecio {
   id: string;
@@ -59,8 +66,20 @@ export function precioConPorcentaje(actual: number, pct: number, protegerHasta =
 
 export const categoriaDe = (p: { categoria?: string }) => (p.categoria || '').trim() || 'Sin categoría';
 
-export function armarFilas(productos: ProductoLista[], aj: AjustesLista): FilaPrecio[] {
+/** Insumo con algún valor (costo o precio) para la lista de insumos. */
+export function entraEnInsumos(p: ProductoLista): boolean {
+  const v = (Number(p.costoBase) || 0) || (Number(p.precioVenta) || 0);
+  return p.tipo === 'ingrediente' && v > 0 && v < 10_000_000 && !esNombreBasura(p.nombre);
+}
+
+export function armarFilas(productos: ProductoLista[], aj: AjustesLista, modo: ModoLista = 'venta'): FilaPrecio[] {
   const ocultos = new Set(aj.ocultos);
+  if (modo === 'insumos') {
+    return productos.filter(entraEnInsumos).map(p => {
+      const v = Math.round((Number(p.costoBase) || 0) || Number(p.precioVenta));
+      return { id: p.id, nombre: p.nombre.trim().replace(/\s+/g, ' '), categoria: categoriaDe(p), actual: v, nuevo: v, manual: false, oculto: ocultos.has(p.id) };
+    }).sort((a, b) => a.categoria.localeCompare(b.categoria, 'es') || a.nombre.localeCompare(b.nombre, 'es'));
+  }
   return productos
     .filter(entraEnLista)
     .map(p => {
@@ -107,23 +126,30 @@ export function textoWhatsApp(filas: FilaPrecio[], soloCambios: boolean): string
  * Hoja para imprimir: precio nuevo grande, dos columnas, por categoría. Todo el texto va escapado.
  * Sin script: la vista previa la muestra dentro de la app y el botón Imprimir llama a print().
  */
-export function htmlImpresion(filas: FilaPrecio[], negocio: string, fecha: string): string {
+export type Papel = 'oficio' | 'carta';
+export const MEDIDAS_PAPEL: Record<Papel, string> = { oficio: '216mm 330mm', carta: '216mm 279mm' };
+
+export function htmlImpresion(filas: FilaPrecio[], negocio: string, fecha: string, papel: Papel = 'oficio', titulo = 'Lista de precios'): string {
+  // Cada categoría va entera (no se parte entre columnas ni hojas); las columnas se llenan en orden,
+  // así una categoría corta entra debajo de una larga en la misma hoja.
   const grupos = agruparPorCategoria(filas.filter(f => !f.oculto)).map(g => `
     <section><h2>${escapeHtml(g.categoria)}</h2>
-      ${g.filas.map(f => `<div class="f"><span>${escapeHtml(capital(f.nombre))}</span><b>${pesos(f.nuevo)}</b></div>`).join('')}
+      ${g.filas.map(f => `<div class="f"><strong>${escapeHtml(capital(f.nombre))}</strong><b>${pesos(f.nuevo)}</b></div>`).join('')}
     </section>`).join('');
-  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Lista de precios</title>
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${escapeHtml(titulo)}</title>
 <style>
-  @page { size: letter; margin: 12mm; }
+  @page { size: ${MEDIDAS_PAPEL[papel]}; margin: 10mm; }
   body { font-family: "Segoe UI", system-ui, sans-serif; color: #111; margin: 0; font-size: 12.5px; }
-  h1 { font-size: 20px; margin: 0; } .fecha { color: #555; margin: 2px 0 12px; }
-  .cols { columns: 2; column-gap: 24px; }
-  section { break-inside: avoid; margin-bottom: 12px; }
-  h2 { font-size: 14px; margin: 0 0 4px; padding-bottom: 2px; border-bottom: 2px solid #111; }
+  h1 { font-size: 20px; margin: 0; } .fecha { color: #555; margin: 2px 0 10px; }
+  .cols { columns: 2; column-gap: 22px; column-fill: auto; }
+  section { break-inside: avoid; page-break-inside: avoid; margin-bottom: 12px; }
+  h2 { font-size: 17px; font-weight: 800; color: #c1121f; text-decoration: underline; text-underline-offset: 3px; margin: 0 0 4px; }
   .f { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; border-bottom: 1px dotted #bbb; }
+  .f strong { font-weight: 700; }
   .f b { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  @media screen { body { padding: 14px; } .cols { column-fill: balance; } }
 </style></head><body>
-<h1>${escapeHtml(negocio)} · Lista de precios</h1><p class="fecha">${escapeHtml(fecha)}</p>
+<h1>${escapeHtml(negocio)} · ${escapeHtml(titulo)}</h1><p class="fecha">${escapeHtml(fecha)}</p>
 <div class="cols">${grupos}</div>
 </body></html>`;
 }

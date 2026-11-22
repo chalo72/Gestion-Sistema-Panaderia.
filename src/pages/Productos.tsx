@@ -612,6 +612,7 @@ export default function Productos({
                 onOpenChange={setIsListaPreciosOpen}
                 productos={productos}
                 onUpdateProducto={onUpdateProducto}
+                categorias={categorias}
             />
 
             <BeverageAssistantModal
