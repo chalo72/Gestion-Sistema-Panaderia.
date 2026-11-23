@@ -7,7 +7,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { esCategoriaDeReceta, categoriaVigente, normalizarNombreCat, SIN_CATEGORIA_TXT } from '@/lib/limpiar-categorias';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ProductAvatar } from '@/components/ui/ProductAvatar';
@@ -61,12 +62,21 @@ const COLORES_PRESET = [
 ];
 
 export default function Productos({
-    productos, proveedores, precios: _precios, categorias, inventario,
+    productos, proveedores, precios: _precios, categorias: categoriasProp, inventario,
     onAddProducto, onUpdateProducto, onDeleteProducto,
     onAddCategoria, onDeleteCategoria, onUpdateCategoria, onAddOrUpdatePrecio, onDeletePrecio,
     getMejorPrecio, getPreciosByProducto, getProveedorById, formatCurrency, modelosPan = [], formulaciones = [], onUpdateModeloPan,
     sesionesCaja = [], gastos = [],
 }: ProductosProps) {
+    // 2026-11-23: recetas de pan que se colaron como categoría (traen fórmula) no se muestran; orden alfabético.
+    const categorias = useMemo(() => (categoriasProp || [])
+        .filter(c => !esCategoriaDeReceta(c))
+        .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' })), [categoriasProp]);
+    const cuentaPorCategoria = useMemo(() => {
+        const m = new Map<string, number>();
+        for (const p of productos) { const c = categoriaVigente(p.categoria, categorias); m.set(c, (m.get(c) || 0) + 1); }
+        return m;
+    }, [productos, categorias]);
     const [isOrdenarPanesOpen, setIsOrdenarPanesOpen] = useState(false);
     const [isListaPreciosOpen, setIsListaPreciosOpen] = useState(false); // 2026-11-21: subir/bajar precios e imprimir
     const panesPorOrdenar = useMemo(
@@ -161,7 +171,7 @@ export default function Productos({
                 || (p.categoria && p.categoria.toLowerCase().includes(q))
                 || pProveedoresStr.includes(q);
                 
-            const matchCat = filtroCategoria === 'Todos' || p.categoria === filtroCategoria;
+            const matchCat = filtroCategoria === 'Todos' || categoriaVigente(p.categoria, categorias) === filtroCategoria;
             const matchTipo = filtroTipo === 'todos' || (p.tipo || 'elaborado') === filtroTipo;
             const matchRevisar = !soloRevisarPrecio || problemasPrecio.has(p.id);
             return matchSearch && matchCat && matchTipo && matchRevisar;
@@ -172,7 +182,12 @@ export default function Productos({
             if (ordenTamano) return (ordenTamano.get(a.id) ?? 0) - (ordenTamano.get(b.id) ?? 0);
             return (a.nombre || '').localeCompare(b.nombre || '');
         });
-    }, [productos, _precios, searchTerm, filtroCategoria, filtroTipo, getProveedorById, soloRevisarPrecio, problemasPrecio, grupoVisto, ordenLista]);
+    }, [productos, _precios, searchTerm, filtroCategoria, filtroTipo, getProveedorById, soloRevisarPrecio, problemasPrecio, grupoVisto, ordenLista, categorias]);
+
+    // Filtros activos: siempre se pueden quitar y volver a ver todo (2026-11-23)
+    const hayFiltros = soloRevisarPrecio || !!grupoVisto || filtroCategoria !== 'Todos' || filtroTipo !== 'todos' || !!searchTerm.trim();
+    const verTodo = () => { setSoloRevisarPrecio(false); setGrupoVisto(null); setVerDuplicados(false); setFiltroCategoria('Todos'); setFiltroTipo('todos'); setSearchTerm(''); };
+    const elegirCategoria = (v: string) => { setFiltroCategoria(v); setGrupoVisto(null); };
 
     const countVenta = productos.filter(p => p.tipo !== 'ingrediente').length;
     const countInsumo = productos.filter(p => p.tipo === 'ingrediente').length;
@@ -491,27 +506,54 @@ export default function Productos({
             <div className="flex flex-col md:flex-row items-center gap-4">
                 <div className="relative flex-1 w-full">
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-                    <Input placeholder="Buscar producto por nombre o categoría..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
+                    <Input placeholder="Buscar producto por nombre o categoría..." value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setGrupoVisto(null); }}
                         className="w-full pl-11 rounded-xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 h-12 text-base" />
                 </div>
-                <Select value={filtroCategoria} onValueChange={setFiltroCategoria}>
+                <Select value={filtroCategoria} onValueChange={elegirCategoria}>
                     <SelectTrigger className="w-full md:w-64 h-12 rounded-xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-base font-semibold">
                         <SelectValue placeholder="Categoría" />
                     </SelectTrigger>
                     <SelectContent className="rounded-xl max-h-80">
-                        <SelectItem value="Todos" className="text-base py-2.5 font-semibold">Todas las categorías</SelectItem>
-                        {categorias.map(cat => (
-                            <SelectItem key={cat.id} value={cat.nombre} className="text-base py-2.5">
-                                <div className="flex items-center gap-2">
-                                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: cat.color }} />
-                                    {cat.nombre}
-                                    <span className="text-xs text-slate-400 ml-auto">({productos.filter(p => p.categoria === cat.nombre).length})</span>
-                                </div>
+                        <SelectItem value="Todos" className="text-base py-2.5 font-semibold">Todas las categorías ({productos.length})</SelectItem>
+                        {([['venta', '🛒 Para venta'], ['insumo', '📦 Insumos']] as const).map(([tipo, titulo]) => {
+                            const lista = categorias.filter(c => (c.tipo === 'insumo' || normalizarNombreCat(c.nombre).startsWith('ins')) === (tipo === 'insumo'));
+                            if (lista.length === 0) return null;
+                            return (
+                                <SelectGroup key={tipo}>
+                                    <SelectLabel className="text-xs font-black uppercase tracking-wide text-slate-600 dark:text-slate-300">{titulo}</SelectLabel>
+                                    {lista.map(cat => (
+                                        <SelectItem key={cat.id} value={cat.nombre} className="text-base py-2.5">
+                                            <div className="flex items-center gap-2 w-full">
+                                                <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
+                                                <span className="truncate">{cat.nombre}</span>
+                                                <span className="text-xs text-slate-600 dark:text-slate-300 ml-auto tabular-nums">({cuentaPorCategoria.get(cat.nombre) || 0})</span>
+                                            </div>
+                                        </SelectItem>
+                                    ))}
+                                </SelectGroup>
+                            );
+                        })}
+                        {(cuentaPorCategoria.get(SIN_CATEGORIA_TXT) || 0) > 0 && (
+                            <SelectItem value={SIN_CATEGORIA_TXT} className="text-base py-2.5 italic">
+                                {SIN_CATEGORIA_TXT} ({cuentaPorCategoria.get(SIN_CATEGORIA_TXT)})
                             </SelectItem>
-                        ))}
+                        )}
                     </SelectContent>
                 </Select>
             </div>
+
+            {/* Filtros activos: se ven y se quitan con un toque (2026-11-23) */}
+            {hayFiltros && (
+                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-3 py-2">
+                    <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Mostrando {filteredProductos.length} de {productos.length}:</span>
+                    {soloRevisarPrecio && <button type="button" onClick={() => setSoloRevisarPrecio(false)} className="h-8 px-3 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-100 text-sm font-bold">Precios para revisar ✕</button>}
+                    {grupoVisto && <button type="button" onClick={() => setGrupoVisto(null)} className="h-8 px-3 rounded-full bg-violet-100 text-violet-800 dark:bg-violet-500/20 dark:text-violet-100 text-sm font-bold">Posible duplicado ✕</button>}
+                    {filtroCategoria !== 'Todos' && !grupoVisto && <button type="button" onClick={() => setFiltroCategoria('Todos')} className="h-8 px-3 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-100 text-sm font-bold">{filtroCategoria} ✕</button>}
+                    {filtroTipo !== 'todos' && <button type="button" onClick={() => setFiltroTipo('todos')} className="h-8 px-3 rounded-full bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-100 text-sm font-bold">{filtroTipo === 'elaborado' ? 'Para venta' : 'Insumos'} ✕</button>}
+                    {searchTerm.trim() && !grupoVisto && <button type="button" onClick={() => setSearchTerm('')} className="h-8 px-3 rounded-full bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-100 text-sm font-bold">«{searchTerm.trim()}» ✕</button>}
+                    <button type="button" onClick={verTodo} className="ml-auto h-9 px-4 rounded-lg bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-sm font-black">Ver todos los productos</button>
+                </div>
+            )}
 
             {/* Contenido */}
             <div className="pb-10">
@@ -519,7 +561,9 @@ export default function Productos({
                     <div className="flex flex-col items-center justify-center py-20 text-center">
                         <div className="p-6 rounded-full bg-slate-100 mb-4"><Package className="w-12 h-12 text-slate-300" /></div>
                         <h3 className="text-xl font-bold text-slate-400">Sin productos</h3>
-                        <p className="text-base text-slate-400 mt-1 mb-6">Agrega tu primer producto para comenzar.</p>
+                        {hayFiltros
+                            ? <button type="button" onClick={verTodo} className="mt-3 h-11 px-5 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-base font-black">Quitar filtros y ver todos</button>
+                            : <p className="text-base text-slate-400 mt-1 mb-6">Agrega tu primer producto para comenzar.</p>}
 
                     </div>
                 ) : vistaActual === 'cuadricula' ? (
