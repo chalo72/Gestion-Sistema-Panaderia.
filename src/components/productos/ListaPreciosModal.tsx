@@ -8,6 +8,8 @@ import { normTexto } from '@/lib/busqueda-productos';
 import { consultarAgente } from '@/constants/agentes';
 import { db } from '@/lib/database';
 import type { Producto } from '@/types';
+import { revisarPrecio, indiceRepetidos, type ProblemaPrecio } from '@/lib/precio-inconsistente';
+import { AvisoPrecio } from '@/components/precios/AvisoPrecio';
 import {
   armarFilas, agruparPorCategoria, cambiosParaAplicar, textoWhatsApp, htmlImpresion,
   cargarAjustes, guardarAjustes, cargarRespaldo, guardarRespaldo, borrarRespaldo,
@@ -110,11 +112,24 @@ export function ListaPreciosModal({ isOpen, onOpenChange, productos, onUpdatePro
     catch { toast.error('No se pudo cambiar la categoría. Intente otra vez.'); }
   };
   const costos = useMemo(() => Object.fromEntries(productos.map(p => [p.id, Number(p.costoBase) || 0])), [productos]);
+  // Precios de venta para revisar (2026-11-23): se revisa el precio que va a salir en la hoja
+  const [soloRevisar, setSoloRevisar] = useState(false);
+  const problemas = useMemo(() => {
+    const m = new Map<string, ProblemaPrecio[]>();
+    if (!esVenta) return m;
+    const repetidos = indiceRepetidos(productos);
+    for (const f of filas) {
+      const ps = revisarPrecio({ id: f.id, nombre: f.nombre, precioVenta: f.nuevo }, { costoUnitario: costos[f.id], repetidos });
+      if (ps.length) m.set(f.id, ps);
+    }
+    return m;
+  }, [filas, productos, costos, esVenta]);
   const grupos = useMemo(() => {
     const q = normTexto(busqueda);
-    const visibles = q ? filas.filter(f => normTexto(f.nombre).includes(q) || normTexto(f.categoria).includes(q)) : filas;
+    let visibles = q ? filas.filter(f => normTexto(f.nombre).includes(q) || normTexto(f.categoria).includes(q)) : filas;
+    if (soloRevisar) visibles = visibles.filter(f => problemas.has(f.id));
     return agruparPorCategoria(visibles);
-  }, [filas, busqueda]);
+  }, [filas, busqueda, soloRevisar, problemas]);
   const todasCategorias = useMemo(() => Array.from(new Set(filas.map(f => f.categoria))), [filas]);
   // Las que salen en la hoja (al menos un producto marcado para imprimir), en su orden
   const categoriasImpresas = useMemo(() => Array.from(new Set(filas.filter(f => !f.oculto).map(f => f.categoria))), [filas]);
@@ -162,15 +177,6 @@ export function ListaPreciosModal({ isOpen, onOpenChange, productos, onUpdatePro
   // Mover de posición (2026-11-22): categorías completas o productos dentro de su categoría
   const moverCategoriaPos = (cat: string, dir: -1 | 1) =>
     setAj(a => ({ ...a, ordenCategorias: moverEnLista(todasCategorias, cat, dir) }));
-  // En la vista previa: cambia de lugar con la vecina que SÍ sale en la hoja (no con una quitada)
-  const moverCategoriaImpresa = (cat: string, dir: -1 | 1) => {
-    const vecina = categoriasImpresas[categoriasImpresas.indexOf(cat) + dir];
-    if (!vecina) return;
-    const orden = [...todasCategorias];
-    const i = orden.indexOf(cat), j = orden.indexOf(vecina);
-    [orden[i], orden[j]] = [orden[j], orden[i]];
-    setAj(a => ({ ...a, ordenCategorias: orden }));
-  };
   const moverProductoPos = (cat: string, id: string, dir: -1 | 1) => {
     const ids = filas.filter(f => f.categoria === cat).map(f => f.id);
     setAj(a => ({ ...a, ordenProductos: { ...a.ordenProductos, [cat]: moverEnLista(ids, id, dir) } }));
@@ -263,20 +269,26 @@ export function ListaPreciosModal({ isOpen, onOpenChange, productos, onUpdatePro
               {/* Ordenar categorías completas mirando la hoja (pedido de Gonzalo, 2026-11-22) */}
               <button type="button" onClick={() => setOrdenAbierto(v => !v)} aria-expanded={ordenAbierto}
                 className="mt-2 h-9 px-3 rounded-lg border border-orange-300 dark:border-orange-700 text-orange-800 dark:text-orange-200 text-sm font-bold flex items-center gap-1.5">
-                <ChevronDown className={cn('w-4 h-4 transition-transform', ordenAbierto && 'rotate-180')} /> Ordenar categorías ({categoriasImpresas.length})
+                <ChevronDown className={cn('w-4 h-4 transition-transform', ordenAbierto && 'rotate-180')} /> Elegir y ordenar categorías ({categoriasImpresas.length} de {todasCategorias.length})
               </button>
               {ordenAbierto && (
+                // Chulear/deschulear la lista de cada categoría (proveedor) y moverla (2026-11-23)
                 <ol className="mt-2 max-h-[38vh] overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-800">
-                  {categoriasImpresas.map((cat, i) => (
-                    <li key={cat} className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-slate-900">
-                      <span className="w-6 text-right text-xs font-bold text-slate-500 dark:text-slate-400 tabular-nums">{i + 1}.</span>
-                      <span className="flex-1 min-w-0 truncate text-sm font-bold text-slate-800 dark:text-slate-100">{cat}</span>
-                      <button type="button" disabled={i === 0} onClick={() => moverCategoriaImpresa(cat, -1)} aria-label={`Subir ${cat}`}
-                        className="w-9 h-8 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200 disabled:opacity-25"><ChevronUp className="w-4 h-4" /></button>
-                      <button type="button" disabled={i === categoriasImpresas.length - 1} onClick={() => moverCategoriaImpresa(cat, 1)} aria-label={`Bajar ${cat}`}
-                        className="w-9 h-8 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200 disabled:opacity-25"><ChevronDown className="w-4 h-4" /></button>
-                    </li>
-                  ))}
+                  {todasCategorias.map((cat, i) => {
+                    const sale = categoriasImpresas.includes(cat);
+                    return (
+                      <li key={cat} className={cn('flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-slate-900', !sale && 'opacity-60')}>
+                        <input type="checkbox" checked={sale} onChange={() => alternarImprimirCategoria(cat)} aria-label={`Imprimir ${cat}`}
+                          className="w-5 h-5 accent-orange-600 shrink-0" />
+                        <span className="w-6 text-right text-xs font-bold text-slate-500 dark:text-slate-400 tabular-nums">{i + 1}.</span>
+                        <span className={cn('flex-1 min-w-0 truncate text-sm font-bold text-slate-800 dark:text-slate-100', !sale && 'line-through')}>{cat}</span>
+                        <button type="button" disabled={i === 0} onClick={() => moverCategoriaPos(cat, -1)} aria-label={`Subir ${cat}`}
+                          className="w-9 h-8 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200 disabled:opacity-25"><ChevronUp className="w-4 h-4" /></button>
+                        <button type="button" disabled={i === todasCategorias.length - 1} onClick={() => moverCategoriaPos(cat, 1)} aria-label={`Bajar ${cat}`}
+                          className="w-9 h-8 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200 disabled:opacity-25"><ChevronDown className="w-4 h-4" /></button>
+                      </li>
+                    );
+                  })}
                 </ol>
               )}
             </div>
@@ -326,6 +338,13 @@ export function ListaPreciosModal({ isOpen, onOpenChange, productos, onUpdatePro
                 <button type="button" onClick={usarSugerenciasEnTodas} className="h-9 px-3 rounded-lg bg-amber-100 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200 text-sm font-bold flex items-center gap-1.5">
                   <Lightbulb className="w-4 h-4" /> Usar % sugeridos en todo
                 </button>
+                {problemas.size > 0 && (
+                  <button type="button" onClick={() => setSoloRevisar(v => !v)} aria-pressed={soloRevisar}
+                    className={cn('h-9 px-3 rounded-lg text-sm font-bold flex items-center gap-1.5 border',
+                      soloRevisar ? 'bg-rose-600 border-rose-600 text-white' : 'bg-rose-50 border-rose-200 text-rose-800 dark:bg-rose-500/10 dark:border-rose-500/40 dark:text-rose-200')}>
+                    <AlertTriangle className="w-4 h-4" /> {soloRevisar ? 'Ver todos' : `Precios para revisar (${problemas.size})`}
+                  </button>
+                )}
               </div>}
             </div>
 
@@ -333,7 +352,7 @@ export function ListaPreciosModal({ isOpen, onOpenChange, productos, onUpdatePro
             <div className="flex-1 overflow-y-auto p-3 space-y-2">
               {grupos.length === 0 && <p className="text-center text-slate-500 py-10">No hay productos con ese nombre.</p>}
               {grupos.map(g => {
-                const abierta = !!busqueda || abiertas.has(g.categoria);
+                const abierta = !!busqueda || soloRevisar || abiertas.has(g.categoria);
                 const suben = g.filas.filter(f => f.nuevo !== f.actual).length;
                 const pct = aj.pctPorCategoria[g.categoria] || 0;
                 const base = sugerenciaBase(g.categoria);
@@ -408,6 +427,7 @@ export function ListaPreciosModal({ isOpen, onOpenChange, productos, onUpdatePro
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <p className={cn('text-sm font-semibold text-slate-800 dark:text-slate-100 break-words', f.oculto && 'line-through')}>{f.nombre}</p>
+                                  {problemas.has(f.id) && <AvisoPrecio problemas={problemas.get(f.id)!} className="my-0.5" />}
                                   <p className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
                                     {esVenta ? 'Ahora' : 'Costo'} {pesos(f.actual)}
                                     {cambia && <span className={cn('ml-1 font-bold', f.nuevo > f.actual ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400')}>

@@ -30,6 +30,8 @@ import { cn } from '@/lib/utils';
 import type { Producto, Proveedor, Categoria } from '@/types';
 import { formatCurrency } from '@/lib/utils';
 import { redondearPrecio } from '@/lib/precio-redondo';
+import { revisarPrecio, indiceRepetidos, type ProblemaPrecio } from '@/lib/precio-inconsistente';
+import { AvisoPrecio } from '@/components/precios/AvisoPrecio';
 
 /* ── COMPONENTE DE MONEDA MEJORADO ── */
 function CurrencyInput({ 
@@ -229,6 +231,20 @@ export function ProveedorForm({
   });
 
   const [catalogoItems, setCatalogoItems] = useState<ProductoCatalogo[]>([]);
+  // Precios de venta para revisar en el catálogo (2026-11-23): se usa el precio que de verdad cobra
+  // la app (el del producto) si ya existe; si no, el que trae el catálogo.
+  const problemasCatalogo = useMemo(() => {
+    const repetidos = indiceRepetidos(productosExistentes);
+    const m = new Map<string, ProblemaPrecio[]>();
+    for (const it of catalogoItems) {
+      const real = it.productoId ? productosExistentes.find(p => p.id === it.productoId) : undefined;
+      const ps = revisarPrecio(
+        { id: it.productoId || it.uid, nombre: it.nombre, precioVenta: real ? real.precioVenta : it.precioVenta, tipo: it.destino === 'insumo' ? 'ingrediente' : undefined },
+        { costoUnitario: it.costoUnitario, repetidos });
+      if (ps.length) m.set(it.uid, ps);
+    }
+    return m;
+  }, [catalogoItems, productosExistentes]);
   const [prodActual, setProdActual] = useState(PROD_INIT);
   const [editingUid, setEditingUid] = useState<string | null>(null);
   const [buscarProd, setBuscarProd] = useState('');
@@ -1160,6 +1176,11 @@ export function ProveedorForm({
                       <Badge variant="outline" className="rounded-full bg-indigo-50 text-indigo-600 border-indigo-200 dark:bg-indigo-950 dark:text-indigo-400 uppercase font-black text-[9px] px-3 py-1">
                         {catalogoItems.length} Registrados
                       </Badge>
+                      {problemasCatalogo.size > 0 && (
+                        <span className="rounded-full bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-200 font-black text-[10px] px-3 py-1">
+                          ⚠ {problemasCatalogo.size} precios para revisar
+                        </span>
+                      )}
                       {voiceFeedback && (
                         <span className="text-[10px] font-bold text-slate-500 animate-ag-fade-in">{voiceFeedback}</span>
                       )}
@@ -1595,6 +1616,7 @@ export function ProveedorForm({
                               onDelete={() => setCatalogoItems(prev => prev.filter(i => i.uid !== item.uid))}
                               formatCurrency={formatCurrency}
                               embalajes={EMBALAJES}
+                              problemas={problemasCatalogo.get(item.uid)}
                             />
                           ))}
                         </tbody>
@@ -1638,9 +1660,9 @@ export function ProveedorForm({
 
 /* ── COMPONENTE MEMORIZADO PARA FILAS (OPTIMIZACIÓN VOLT) ── */
 const TableRow = React.memo(({ 
-  item, isEditing, onEdit, onDelete, formatCurrency, embalajes 
+  item, isEditing, onEdit, onDelete, formatCurrency, embalajes, problemas = []
 }: { 
-  item: ProductoCatalogo; isEditing: boolean; onEdit: () => void; onDelete: () => void; formatCurrency: any; embalajes: any[] 
+  item: ProductoCatalogo; isEditing: boolean; onEdit: () => void; onDelete: () => void; formatCurrency: any; embalajes: any[]; problemas?: ProblemaPrecio[] 
 }) => (
   <tr className={cn(
     "transition-all group",
@@ -1657,6 +1679,7 @@ const TableRow = React.memo(({
         <div className="min-w-0">
           <p className="text-sm font-black text-slate-800 dark:text-white uppercase leading-tight truncate">{item.nombre}</p>
           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{item.categoria}</p>
+          <AvisoPrecio problemas={problemas} className="mt-1" />
         </div>
       </div>
     </td>
