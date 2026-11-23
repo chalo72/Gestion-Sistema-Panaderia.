@@ -172,22 +172,28 @@ export type Papel = 'oficio' | 'carta';
 export const MEDIDAS_PAPEL: Record<Papel, string> = { oficio: '216mm 330mm', carta: '216mm 279mm' };
 
 export function htmlImpresion(filas: FilaPrecio[], negocio: string, fecha: string, papel: Papel = 'oficio', titulo = 'Lista de precios'): string {
-  // Cada categoría va entera (no se parte entre columnas ni hojas); las columnas se llenan en orden,
-  // así una categoría corta entra debajo de una larga en la misma hoja.
+  // Categorías cortas van enteras; las largas pueden seguir en la otra columna u hoja para no dejar
+  // huecos en blanco (2026-11-23: con todas enteras la lista gastaba 5 hojas con espacios vacíos).
   const grupos = agruparPorCategoria(filas.filter(f => !f.oculto)).map(g => `
-    <section><h2>${escapeHtml(g.categoria)}</h2>
+    <section class="${g.filas.length <= 14 ? 'corta' : 'larga'}"><h2>${escapeHtml(g.categoria)}</h2>
       ${g.filas.map(f => `<div class="f"><strong>${escapeHtml(capital(f.nombre))}</strong><b>${pesos(f.nuevo)}</b></div>`).join('')}
     </section>`).join('');
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${escapeHtml(titulo)}</title>
 <style>
-  @page { size: ${MEDIDAS_PAPEL[papel]}; margin: 10mm; }
-  body { font-family: "Segoe UI", system-ui, sans-serif; color: #111; margin: 0; font-size: 12.5px;
+  /* Sin forzar el largo del papel: manda el que elija la impresora (oficio de 330 o «Oficio 9» de 315 mm).
+     Antes se forzaba 216×330 y en «Oficio 9» el navegador achicaba toda la hoja. */
+  @page { size: ${papel === 'carta' ? 'letter portrait' : 'auto'}; margin: 8mm; }
+  html, body { width: 100%; }
+  body { font-family: "Segoe UI", system-ui, sans-serif; color: #111; margin: 0; font-size: 13.5px; line-height: 1.3;
          -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  h1 { font-size: 20px; margin: 0; } .fecha { color: #555; margin: 2px 0 10px; }
-  .cols { columns: 2; column-gap: 22px; column-fill: auto; }
-  section { break-inside: avoid; page-break-inside: avoid; margin-bottom: 12px; }
-  h2 { font-size: 17px; font-weight: 800; color: #c1121f; text-decoration: underline; text-underline-offset: 3px; margin: 0 0 4px; }
-  .f { display: flex; justify-content: space-between; gap: 8px; padding: 3px 6px; border-bottom: 1px dotted #bbb; }
+  h1 { font-size: 19px; margin: 0; } .fecha { color: #555; margin: 2px 0 8px; font-size: 12px; }
+  .cols { columns: 2; column-gap: 18px; column-fill: auto; }
+  section { margin-bottom: 10px; }
+  section.corta { break-inside: avoid; page-break-inside: avoid; }
+  h2 { font-size: 16px; font-weight: 800; color: #c1121f; text-decoration: underline; text-underline-offset: 3px; margin: 0 0 3px;
+       break-after: avoid; page-break-after: avoid; }
+  .f { display: flex; justify-content: space-between; gap: 8px; padding: 2px 6px; border-bottom: 1px dotted #bbb;
+       break-inside: avoid; page-break-inside: avoid; }
   /* Renglones con dos colores suaves alternados para no perderse (pedido de Gonzalo, 2026-11-22) */
   .f:nth-of-type(odd) { background: #fff4e6; }
   .f:nth-of-type(even) { background: #eaf3fb; }

@@ -11,12 +11,20 @@ describe('insumos e impresión (2026-11-22)', () => {
     expect(filas).toHaveLength(1);
     expect(filas[0]).toMatchObject({ id: 'i', actual: 98000, nuevo: 98000 });
   });
-  it('la hoja es oficio, nombres en negrita y títulos rojos subrayados', () => {
+  it('la hoja usa el papel de la impresora, nombres en negrita y títulos rojos subrayados', () => {
     const html = htmlImpresion([{ id: 'a', nombre: 'pan', categoria: 'Alpina', actual: 1, nuevo: 1, manual: false, oculto: false }], 'DP', 'hoy');
-    expect(html).toContain('size: 216mm 330mm');
+    // 2026-11-23: oficio no fuerza 216×330 (en «Oficio 9» de 315 mm el navegador achicaba la hoja)
+    expect(html).toContain('size: auto');
     expect(html).toContain('<strong>Pan</strong>');
     expect(html).toMatch(/h2 \{[^}]*color: #c1121f[^}]*text-decoration: underline/);
-    expect(htmlImpresion([], 'DP', 'hoy', 'carta')).toContain('size: 216mm 279mm');
+    expect(htmlImpresion([], 'DP', 'hoy', 'carta')).toContain('size: letter portrait');
+  });
+
+  it('las categorías largas pueden seguir en otra columna; las cortas van enteras', () => {
+    const muchas = Array.from({ length: 20 }, (_, i) => ({ id: `l${i}`, nombre: `p${i}`, categoria: 'Larga', actual: 1, nuevo: 1, manual: false, oculto: false }));
+    const html = htmlImpresion([...muchas, { id: 'c', nombre: 'c', categoria: 'Corta', actual: 1, nuevo: 1, manual: false, oculto: false }], 'DP', 'hoy');
+    expect(html).toContain('<section class="larga"><h2>Larga');
+    expect(html).toContain('<section class="corta"><h2>Corta');
   });
   it('las categorías nuevas de pan cuentan como horno', () => {
     expect(familiaDeCategoria('Pan de dulce')).toBe('horno');
