@@ -201,10 +201,23 @@ export function ListaPreciosModal({ isOpen, onOpenChange, productos, onUpdatePro
     }
   };
 
+  // Se imprime desde un marco aparte del ANCHO DEL PAPEL (2026-11-23): el navegador arma la hoja con
+  // el ancho del marco, y el de la vista previa es más angosto → la lista salía chiquita y con la
+  // derecha vacía. 199 mm = 215/216 mm de ancho menos 8 mm de margen a cada lado.
   const imprimirAhora = () => {
-    const w = previaRef.current?.contentWindow;
-    if (!w) { toast.error('No se pudo abrir la impresión. Intente otra vez.'); return; }
-    w.focus(); w.print();
+    if (!htmlPrevia) { toast.error('No se pudo abrir la impresión. Intente otra vez.'); return; }
+    const marco = document.createElement('iframe');
+    marco.setAttribute('aria-hidden', 'true');
+    marco.title = 'Impresión de la lista de precios';
+    Object.assign(marco.style, { position: 'fixed', left: '-10000px', top: '0', width: '199mm', height: '297mm', border: '0' });
+    marco.onload = () => {
+      const w = marco.contentWindow;
+      if (!w) { toast.error('No se pudo abrir la impresión. Intente otra vez.'); marco.remove(); return; }
+      w.focus(); w.print();
+      setTimeout(() => marco.remove(), 60_000);
+    };
+    marco.srcdoc = htmlPrevia;
+    document.body.appendChild(marco);
   };
 
   const copiarWhatsApp = async () => {
