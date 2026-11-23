@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { productoExistenteDeFila, cantidadQueSeGuarda } from './guardian-catalogo';
+import { productoExistenteDeFila, cantidadQueSeGuarda, productoQueYaExiste } from './guardian-catalogo';
 
 const productos = [
   { id: 'nucita', nombre: 'Paletya Nucita' },
@@ -42,5 +42,18 @@ describe('la cantidad por paca no se pierde (2026-11-23)', () => {
   });
   it('si cambia la paca a otra cantidad, se respeta', () => {
     expect(cantidadQueSeGuarda({ precioCosto: 30000, cantidadEmbalaje: 24 }, precios[3]).cantidadEmbalaje).toBe(24);
+  });
+});
+
+describe('Recepción no crea lo que ya existe (2026-11-23)', () => {
+  it('encuentra el mismo nombre aunque cambien mayúsculas, tildes o espacios', () => {
+    expect(productoQueYaExiste('  agua DE coco ', productos)).toEqual({ producto: productos[2], exacto: true });
+  });
+  it('encuentra uno casi igual del mismo tamaño', () => {
+    expect(productoQueYaExiste('Paleta Nucita', productos)?.producto.id).toBe('nucita');
+  });
+  it('otro tamaño o algo nuevo no se confunde', () => {
+    expect(productoQueYaExiste('Coca cola 1.5 l', productos)).toBeUndefined();
+    expect(productoQueYaExiste('Gomitas Trululú', productos)).toBeUndefined();
   });
 });
