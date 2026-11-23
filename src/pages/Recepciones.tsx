@@ -45,6 +45,7 @@ import { empaqueDesdeFormulario, precioProveedorDesdeEmpaque, numeroFormulario }
 import { unidadesQueEntran } from '@/lib/venta-paquete';
 import { ultimoCambioPrecio, useCambiosPrecio } from '@/lib/cambio-precio-catalogo';
 import { categoriaVigente, SIN_CATEGORIA_TXT } from '@/lib/limpiar-categorias';
+import { productoQueYaExiste } from '@/lib/guardian-catalogo';
 
 /** "139.990" y "169.980" son pesos colombianos, no decimales. */
 function parsearPesosCol(raw: string): number {
@@ -515,11 +516,23 @@ export default function Recepciones({
             } else {
                 let productoCreado: Producto | null = null;
                 let falloSecundario = false;
-                try {
-                    productoCreado = (await onAddProducto(productoData)) ?? null;
-                } catch {
-                    // addProducto puede persistir el producto antes de fallar al crear su inventario.
-                    falloSecundario = true;
+                // 🛡️ Guardián (2026-11-23): antes de crear, revisar el catálogo en pantalla Y el guardado
+                // (nombre exacto sin tildes/espacios, o uno casi igual del mismo tamaño). Si ya existe,
+                // se usa ese: se actualiza su precio del proveedor y no se crea otro.
+                const yaEstaba = productoQueYaExiste(productoData.nombre, productos)
+                    ?? productoQueYaExiste(productoData.nombre, (await db.getAllProductos().catch(() => [])) as Producto[]);
+                if (yaEstaba) {
+                    productoCreado = yaEstaba.producto;
+                    toast.info(yaEstaba.exacto
+                        ? `"${yaEstaba.producto.nombre}" ya existe: se usó ese y no se creó otro`
+                        : `Se parece a "${yaEstaba.producto.nombre}", que ya existe: se usó ese y no se creó otro`);
+                } else {
+                    try {
+                        productoCreado = (await onAddProducto(productoData)) ?? null;
+                    } catch {
+                        // addProducto puede persistir el producto antes de fallar al crear su inventario.
+                        falloSecundario = true;
+                    }
                 }
 
                 if (!productoCreado) {

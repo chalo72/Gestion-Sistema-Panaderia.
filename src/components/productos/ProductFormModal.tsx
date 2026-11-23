@@ -53,6 +53,8 @@ interface ProductFormModalProps {
     isSubmitting?: boolean;
     /** Cómo se le compra hoy este producto a cada proveedor (más reciente primero). */
     comprasProveedor?: { proveedor: string; tipo: string; cantidad: number; costo: number; fecha?: string }[];
+    /** Cambios de costo guardados (más reciente primero). */
+    historialPrecios?: { proveedor: string; antes: number; despues: number; fecha: string }[];
 }
 
 const NOMBRES_CAT_SISTEMA = new Set(CATEGORIAS_DEFAULT.map((c) => c.nombre.toLowerCase().trim()));
@@ -71,7 +73,7 @@ function esCategoriaReal(cat: Categoria, nombresProductos: Set<string>): boolean
 export function ProductFormModal({
     isOpen, onOpenChange, editingProducto, categorias, productos = [], proveedores,
     formData, setFormData, onSubmit, formatCurrency, onAddCategoria,
-    isSubmitting = false, comprasProveedor = []
+    isSubmitting = false, comprasProveedor = [], historialPrecios = []
 }: ProductFormModalProps) {
     const tipoActual = formData.tipo || 'elaborado';
 
@@ -471,6 +473,21 @@ export function ProductFormModal({
                                     Este producto no tiene proveedor ni costo de compra guardado. Si es un duplicado, revisa el otro antes de llenarlo.
                                 </p>
                             )
+                        )}
+                        {editingProducto && historialPrecios.length > 0 && (
+                            <details className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+                                <summary className="px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 cursor-pointer">Historial de precios ({historialPrecios.length})</summary>
+                                <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                                    {historialPrecios.map((h, i) => (
+                                        <li key={i} className="px-3 py-1.5 flex flex-wrap justify-between gap-x-3 text-sm tabular-nums">
+                                            <span className="text-slate-600 dark:text-slate-300">{h.fecha ? new Date(h.fecha).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'} · {h.proveedor}</span>
+                                            <span className="text-slate-900 dark:text-white">
+                                                {formatCurrency(h.antes)} → <b className={h.despues > h.antes ? 'text-rose-700 dark:text-rose-300' : 'text-emerald-700 dark:text-emerald-300'}>{formatCurrency(h.despues)}</b>
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </details>
                         )}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {/* Proveedor */}

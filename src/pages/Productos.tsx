@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useCan } from '@/contexts/AuthContext';
 import {
     Package, Plus, Search, Edit2, Trash2, ChevronDown, ChevronUp,
@@ -78,6 +78,8 @@ export default function Productos({
         return m;
     }, [productos, categorias]);
     const [isOrdenarPanesOpen, setIsOrdenarPanesOpen] = useState(false);
+    // Historial de cambios de costo del producto que se está editando (2026-11-23)
+    const [historialEditado, setHistorialEditado] = useState<{ proveedor: string; antes: number; despues: number; fecha: string }[]>([]);
     const [isListaPreciosOpen, setIsListaPreciosOpen] = useState(false); // 2026-11-21: subir/bajar precios e imprimir
     const panesPorOrdenar = useMemo(
         () => planOrdenPanes(productos, modelosPan, formulaciones).pendientes,
@@ -90,6 +92,24 @@ export default function Productos({
     const [isSaving, setIsSaving] = useState(false);
     const [isCategoriaDialogOpen, setIsCategoriaDialogOpen] = useState(false);
     const [editingProducto, setEditingProducto] = useState<Producto | null>(null);
+    useEffect(() => {
+        if (!editingProducto?.id) { setHistorialEditado([]); return; }
+        let vivo = true;
+        db.getAllHistorial().then((todos: any[]) => {
+            if (!vivo) return;
+            setHistorialEditado((todos || [])
+                .filter(h => h?.productoId === editingProducto.id)
+                .sort((a, b) => String(b.fechaCambio || '').localeCompare(String(a.fechaCambio || '')))
+                .slice(0, 12)
+                .map(h => ({
+                    proveedor: getProveedorById(h.proveedorId)?.nombre || 'Proveedor borrado',
+                    antes: Number(h.precioAnterior) || 0,
+                    despues: Number(h.precioNuevo) || 0,
+                    fecha: h.fechaCambio,
+                })));
+        }).catch(() => { if (vivo) setHistorialEditado([]); });
+        return () => { vivo = false; };
+    }, [editingProducto?.id]); // eslint-disable-line react-hooks/exhaustive-deps
     const [expandedProducto, setExpandedProducto] = useState<string | null>(null);
     const [vistaActual, setVistaActual] = useState<'lista' | 'cuadricula'>('lista');
     const [isIceCreamAssistantOpen, setIsIceCreamAssistantOpen] = useState(false);
@@ -760,7 +780,8 @@ export default function Productos({
                         cantidad: Number(pr.cantidadEmbalaje) || 1,
                         costo: Number(pr.precioCosto) || 0,
                         fecha: pr.fechaActualizacion,
-                    })) : []} />
+                    })) : []}
+                historialPrecios={historialEditado} />
             <ProductCategoryManager isOpen={isCategoriaDialogOpen} onOpenChange={setIsCategoriaDialogOpen}
                 categorias={categorias} onDeleteCategoria={onDeleteCategoria} onUpdateCategoria={onUpdateCategoria}
                 onAddCategoria={handleHandleAddCategoria}

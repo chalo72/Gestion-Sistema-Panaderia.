@@ -58,3 +58,21 @@ export function cantidadQueSeGuarda(
   }
   return { cantidadEmbalaje: nueva.cantidadEmbalaje, tipoEmbalaje: nueva.tipoEmbalaje, corregida: false };
 }
+
+/**
+ * Antes de CREAR un producto (Recepción → Nuevo producto, 2026-11-23): ¿ya existe en todo el
+ * catálogo? Primero el nombre exacto (sin mayúsculas, tildes ni espacios de más); luego uno
+ * casi igual y del mismo tamaño, solo si hay UNO (si hay varios parecidos no se adivina).
+ */
+export function productoQueYaExiste<T extends ProductoMin>(nombre: string, productos: T[]): { producto: T; exacto: boolean } | undefined {
+  const n = normal(nombre);
+  if (!n) return undefined;
+  const exacto = productos.find(p => normal(p.nombre) === n);
+  if (exacto) return { producto: exacto, exacto: true };
+  const info = analizarNombre(nombre);
+  const parecidos = productos.filter(p => {
+    const m = compararProductos(info, analizarNombre(p.nombre));
+    return m === 'mismo-tamano' || m === 'mismo-nombre';
+  });
+  return parecidos.length === 1 ? { producto: parecidos[0], exacto: false } : undefined;
+}
