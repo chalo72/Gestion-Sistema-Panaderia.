@@ -69,6 +69,7 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { hoyLocal } from '@/lib/fecha-local';
 import { redondearPrecio } from '@/lib/precio-redondo';
+import { productoExistenteDeFila, cantidadQueSeGuarda } from '@/lib/guardian-catalogo';
 
 /* ── Tipos para la vista ── */
 type TipoEmbalaje =
@@ -669,7 +670,7 @@ export function Proveedores({
         const productosCreadosEnEsteLote = new Map<string, string>();
         for (const item of items) {
           try {
-            let productoId = item.productoId;
+            let productoId: string | undefined = item.productoId;
 
             // Buscar etiquetas de embalaje con seguridad (Nexus-Shield-Guard)
             const infoEmbalaje = EMBALAJES.find(e => e.value === item.tipoEmbalaje) || { label: 'Unidad', emoji: '\uD83D\uDD39' };
@@ -680,17 +681,13 @@ export function Proveedores({
             const cantidadBase = (Number(item.cantidadEmbalaje) || 1) * factorUM;
             const descripcionGenerada = `${infoEmbalaje.label} x${item.cantidadEmbalaje || 1}${unidadMed !== 'und' ? ' ' + unidadMed : ''}`;
 
-            // Crear producto si no existe o si el ID apunta a un producto eliminado (huérfano)
-            const yaExiste = productoId ? !!getProductoById(productoId) : false;
-
-            // Si no hay productoId (el usuario escribió el nombre sin seleccionar del dropdown),
-            // buscar si ya existe un producto con ese nombre exacto para reutilizarlo en vez de duplicar
+            // 🛡️ Guardián (2026-11-23): una fila que ya estaba actualiza SU producto aunque se
+            // haya renombrado; un nombre igual o casi igual a lo que el proveedor ya vende
+            // reutiliza ese producto. Solo se crea uno nuevo si de verdad no existe.
             const nombreNorm = item.nombre.trim().toLowerCase();
-            if (!productoId || !yaExiste) {
-              const productoHomonimo = _productos.find(p => p.nombre.trim().toLowerCase() === nombreNorm);
-              if (productoHomonimo) {
-                productoId = productoHomonimo.id;
-              } else if (productosCreadosEnEsteLote.has(nombreNorm)) {
+            productoId = productoExistenteDeFila(item, { precios, productos: _productos, proveedorId: provId });
+            if (!productoId) {
+              if (productosCreadosEnEsteLote.has(nombreNorm)) {
                 // Ya se creó un producto con este nombre en un item anterior de este mismo guardado
                 productoId = productosCreadosEnEsteLote.get(nombreNorm);
               }
@@ -714,15 +711,29 @@ export function Proveedores({
             }
 
             if (productoId) {
+              // 🛡️ Guardián: si llega «1 unidad» con costo de paca, se conserva la paca guardada
+              const precioPrevio = precios.find(p => p.id === item.uid)
+                || precios.find(p => p.productoId === productoId && p.proveedorId === provId);
+              const empaque = cantidadQueSeGuarda({
+                precioCosto: Math.round(Number(item.precioCosto) || 0),
+                cantidadEmbalaje: Math.round(cantidadBase * 1000) / 1000, // guardar en kg/L base
+                tipoEmbalaje: item.tipoEmbalaje,
+              }, precioPrevio);
+              if (empaque.corregida) {
+                toast.info(`${item.nombre}: se conservó la paca de ${empaque.cantidadEmbalaje} (el costo es de paca, no de 1 unidad)`);
+              }
+              const costoUnitarioFinal = empaque.corregida
+                ? Math.round((Number(item.precioCosto) || 0) / empaque.cantidadEmbalaje)
+                : Math.round(Number(item.costoUnitario) || 0);
               await onAddOrUpdatePrecio({
-                id: item.uid, // onAddOrUpdatePrecio usará este ID si existe
+                id: precioPrevio && precioPrevio.id !== item.uid && empaque.corregida ? precioPrevio.id : item.uid, // onAddOrUpdatePrecio usará este ID si existe
                 productoId,
                 proveedorId: provId,
                 precioCosto: Math.round(Number(item.precioCosto) || 0),
                 notas: item.notas || descripcionGenerada,
                 destino: item.destino,
-                tipoEmbalaje: item.tipoEmbalaje,
-                cantidadEmbalaje: Math.round(cantidadBase * 1000) / 1000, // guardar en kg/L base
+                tipoEmbalaje: empaque.tipoEmbalaje as any,
+                cantidadEmbalaje: empaque.cantidadEmbalaje,
               });
 
               // Sincronización con Módulo de Productos
@@ -740,7 +751,7 @@ export function Proveedores({
                 updatedAt: new Date().toISOString(),
                 ...(!esCompartido && {
                   categoria: item.categoria || getProductoById(productoId)?.categoria || '',
-                  costoBase: Math.round(Number(item.costoUnitario) || 0),
+                  costoBase: costoUnitarioFinal,
                   margenUtilidad: Number(item.margenVenta) || 30,
                   precioVenta: redondearPrecio(item.precioVenta),
                 }),

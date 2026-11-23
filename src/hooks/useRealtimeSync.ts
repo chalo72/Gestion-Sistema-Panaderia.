@@ -40,6 +40,7 @@ import { mergeHydrateItem, timestampDeDoc, esCajaRevivida, valoresIguales, enLot
 import { RESPALDOS_HORARIO } from '@/lib/horario-tienda';
 import { hoyLocal, ymdLocal } from '@/lib/fecha-local';
 import { tieneEventosNuevos } from '@/lib/historial-credito';
+import { leerLapidasNube, borradoSegunNube, type LapidasNube } from '@/lib/lapidas-nube';
 
 const _sdb = new SupabaseDatabase();
 // Mapeadores internos de supabase-db (privados en TypeScript, pero son funciones normales).
@@ -487,10 +488,11 @@ export function useRealtimeSync() {
 
     // Borrados registrados en la nube (por cualquier aparato). Antes solo se miraban los de
     // ESTE aparato: uno que estaba apagado cuando se borró algo lo volvía a subir (2026-11-18).
-    let tumbasNubeInicio: Set<string> | null = null;
+    // 2026-11-23: con la hora del borrado, para saber si alguien lo editó después (restaurado).
+    let tumbasNubeInicio: LapidasNube | null = null;
     try {
-      const { data, error } = await supabase.from('tombstones').select('table, item_id');
-      if (!error) tumbasNubeInicio = new Set((data ?? []).map((r: any) => `${r.table}:${r.item_id}`));
+      const { data, error } = await supabase.from('tombstones').select('table, item_id, deleted_at');
+      if (!error) tumbasNubeInicio = leerLapidasNube(data ?? []);
     } catch { /* sin lista de borrados: se sigue como antes */ }
 
     // 3) SUBIR solo lo que falta en la nube o cambió aquí
@@ -550,10 +552,12 @@ export function useRealtimeSync() {
       // Solo tablas que sí se borran (proveedores, productos, precios…); ventas, cajas,
       // inventario, nómina, etc. nunca se tocan aquí.
       const seBorra = !!HANDLERS[tableName] && HANDLERS[tableName].deleteFromLocal !== noBorrar;
+      // 🛡️ 2026-11-23: también si sigue en la nube (el borrado allá falló o otro aparato lo
+      // resubió) mientras ninguna copia se haya editado después del borrado.
       const borradosFuera = tumbasNubeInicio && seBorra
         ? itemsLocales.filter((local: any) =>
-            local?.id && !tombSet.has(local.id) && !mapaRemoto.has(local.id)
-            && tumbasNubeInicio!.has(`${tablaLocal}:${local.id}`))
+            local?.id && !tombSet.has(local.id)
+            && borradoSegunNube(tumbasNubeInicio, tablaLocal, local.id, local, mapaRemoto.get(local.id)))
         : [];
       for (const b of borradosFuera) {
         tombSet.add(b.id);
@@ -643,6 +647,7 @@ export function useRealtimeSync() {
       }));
     } catch { /* sigue */ }
 
+    const seBorraTabla = (t: string) => !!HANDLERS[t] && HANDLERS[t].deleteFromLocal !== noBorrar;
     // 4) BAJAR lo nuevo y lo que en la nube es más nuevo (respeta borrados)
     const tumbasConFecha: any[] = await localAdapter.getCollection<any>('tombstones').catch(() => [] as any[]);
     for (const [table, handler] of Object.entries(HANDLERS)) {
@@ -657,14 +662,17 @@ export function useRealtimeSync() {
       const localMap     = new Map(localItems.map((i: any) => [i.id, i]));
       const tombstoneSet = new Set(tombstones);
 
+      // 🛡️ 2026-11-23: lo borrado (lápida en la nube, sin edición posterior) no se vuelve a bajar
+      const muertoEnNube = (i: any) => seBorraTabla(table)
+        && borradoSegunNube(tumbasNubeInicio, handler.localTableName, i?.id, i, localMap.get(i?.id));
       const nuevos = supabaseItems.filter((i: any) =>
-        i?.id && !localMap.has(i.id) && !tombstoneSet.has(i.id),
+        i?.id && !localMap.has(i.id) && !tombstoneSet.has(i.id) && !muertoEnNube(i),
       );
       // Ventas no se editan después de creadas
       const actualizados = table === 'ventas'
         ? []
         : supabaseItems.filter((remote: any) => {
-            if (!remote?.id || !localMap.has(remote.id) || tombstoneSet.has(remote.id)) return false;
+            if (!remote?.id || !localMap.has(remote.id) || tombstoneSet.has(remote.id) || muertoEnNube(remote)) return false;
             const localItem = localMap.get(remote.id);
             if (table === 'inventario') {
               return remote.stockActual !== localItem.stockActual
