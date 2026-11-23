@@ -135,3 +135,12 @@ describe('categorías borradas, qué imprimir y orden (2026-11-22)', () => {
     expect(htmlImpresion(filas, 'DP', 'hoy')).not.toContain('Avena');
   });
 });
+
+describe('hoja impresa con renglones de colores (2026-11-22)', () => {
+  it('alterna dos colores suaves y los conserva al imprimir', () => {
+    const html = htmlImpresion(armarFilas([{ id: 'x', nombre: 'Pan', categoria: 'Panes', precioVenta: 1000 }] as any, AJUSTES_VACIOS), 'DP', 'hoy');
+    expect(html).toContain('.f:nth-of-type(odd)');
+    expect(html).toContain('.f:nth-of-type(even)');
+    expect(html).toContain('print-color-adjust: exact');
+  });
+});

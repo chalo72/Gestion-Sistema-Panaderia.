@@ -86,6 +86,7 @@ export function ListaPreciosModal({ isOpen, onOpenChange, productos, onUpdatePro
   const [respaldo, setRespaldo] = useState<Respaldo | null>(() => cargarRespaldo());
   const [analisis, setAnalisis] = useState<Record<string, EstadoIA>>({});
   const [vista, setVista] = useState<'lista' | 'previa'>('lista');
+  const [ordenAbierto, setOrdenAbierto] = useState(false);
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const previaRef = useRef<HTMLIFrameElement>(null);
 
@@ -115,6 +116,8 @@ export function ListaPreciosModal({ isOpen, onOpenChange, productos, onUpdatePro
     return agruparPorCategoria(visibles);
   }, [filas, busqueda]);
   const todasCategorias = useMemo(() => Array.from(new Set(filas.map(f => f.categoria))), [filas]);
+  // Las que salen en la hoja (al menos un producto marcado para imprimir), en su orden
+  const categoriasImpresas = useMemo(() => Array.from(new Set(filas.filter(f => !f.oculto).map(f => f.categoria))), [filas]);
   const ocultos = filas.filter(f => f.oculto).length;
   const fechaLista = 'Precios desde el ' + new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const htmlPrevia = useMemo(
@@ -159,6 +162,15 @@ export function ListaPreciosModal({ isOpen, onOpenChange, productos, onUpdatePro
   // Mover de posición (2026-11-22): categorías completas o productos dentro de su categoría
   const moverCategoriaPos = (cat: string, dir: -1 | 1) =>
     setAj(a => ({ ...a, ordenCategorias: moverEnLista(todasCategorias, cat, dir) }));
+  // En la vista previa: cambia de lugar con la vecina que SÍ sale en la hoja (no con una quitada)
+  const moverCategoriaImpresa = (cat: string, dir: -1 | 1) => {
+    const vecina = categoriasImpresas[categoriasImpresas.indexOf(cat) + dir];
+    if (!vecina) return;
+    const orden = [...todasCategorias];
+    const i = orden.indexOf(cat), j = orden.indexOf(vecina);
+    [orden[i], orden[j]] = [orden[j], orden[i]];
+    setAj(a => ({ ...a, ordenCategorias: orden }));
+  };
   const moverProductoPos = (cat: string, id: string, dir: -1 | 1) => {
     const ids = filas.filter(f => f.categoria === cat).map(f => f.id);
     setAj(a => ({ ...a, ordenProductos: { ...a.ordenProductos, [cat]: moverEnLista(ids, id, dir) } }));
@@ -248,6 +260,25 @@ export function ListaPreciosModal({ isOpen, onOpenChange, productos, onUpdatePro
                 ))}
                 <span className="text-xs text-slate-500 dark:text-slate-400">En la ventana de imprimir elija el mismo tamaño.</span>
               </div>
+              {/* Ordenar categorías completas mirando la hoja (pedido de Gonzalo, 2026-11-22) */}
+              <button type="button" onClick={() => setOrdenAbierto(v => !v)} aria-expanded={ordenAbierto}
+                className="mt-2 h-9 px-3 rounded-lg border border-orange-300 dark:border-orange-700 text-orange-800 dark:text-orange-200 text-sm font-bold flex items-center gap-1.5">
+                <ChevronDown className={cn('w-4 h-4 transition-transform', ordenAbierto && 'rotate-180')} /> Ordenar categorías ({categoriasImpresas.length})
+              </button>
+              {ordenAbierto && (
+                <ol className="mt-2 max-h-[38vh] overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-800">
+                  {categoriasImpresas.map((cat, i) => (
+                    <li key={cat} className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-slate-900">
+                      <span className="w-6 text-right text-xs font-bold text-slate-500 dark:text-slate-400 tabular-nums">{i + 1}.</span>
+                      <span className="flex-1 min-w-0 truncate text-sm font-bold text-slate-800 dark:text-slate-100">{cat}</span>
+                      <button type="button" disabled={i === 0} onClick={() => moverCategoriaImpresa(cat, -1)} aria-label={`Subir ${cat}`}
+                        className="w-9 h-8 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200 disabled:opacity-25"><ChevronUp className="w-4 h-4" /></button>
+                      <button type="button" disabled={i === categoriasImpresas.length - 1} onClick={() => moverCategoriaImpresa(cat, 1)} aria-label={`Bajar ${cat}`}
+                        className="w-9 h-8 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200 disabled:opacity-25"><ChevronDown className="w-4 h-4" /></button>
+                    </li>
+                  ))}
+                </ol>
+              )}
             </div>
             <div className="flex-1 overflow-auto bg-slate-200 dark:bg-slate-800 p-3">
               <iframe ref={previaRef} title="Vista previa de la lista de precios" srcDoc={htmlPrevia}

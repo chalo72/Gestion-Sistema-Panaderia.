@@ -181,12 +181,16 @@ export function htmlImpresion(filas: FilaPrecio[], negocio: string, fecha: strin
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${escapeHtml(titulo)}</title>
 <style>
   @page { size: ${MEDIDAS_PAPEL[papel]}; margin: 10mm; }
-  body { font-family: "Segoe UI", system-ui, sans-serif; color: #111; margin: 0; font-size: 12.5px; }
+  body { font-family: "Segoe UI", system-ui, sans-serif; color: #111; margin: 0; font-size: 12.5px;
+         -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   h1 { font-size: 20px; margin: 0; } .fecha { color: #555; margin: 2px 0 10px; }
   .cols { columns: 2; column-gap: 22px; column-fill: auto; }
   section { break-inside: avoid; page-break-inside: avoid; margin-bottom: 12px; }
   h2 { font-size: 17px; font-weight: 800; color: #c1121f; text-decoration: underline; text-underline-offset: 3px; margin: 0 0 4px; }
-  .f { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; border-bottom: 1px dotted #bbb; }
+  .f { display: flex; justify-content: space-between; gap: 8px; padding: 3px 6px; border-bottom: 1px dotted #bbb; }
+  /* Renglones con dos colores suaves alternados para no perderse (pedido de Gonzalo, 2026-11-22) */
+  .f:nth-of-type(odd) { background: #fff4e6; }
+  .f:nth-of-type(even) { background: #eaf3fb; }
   .f strong { font-weight: 700; }
   .f b { white-space: nowrap; font-variant-numeric: tabular-nums; }
   @media screen { body { padding: 14px; } .cols { column-fill: balance; } }
