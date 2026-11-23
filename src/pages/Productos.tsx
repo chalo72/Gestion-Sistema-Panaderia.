@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useCan } from '@/contexts/AuthContext';
 import {
     Package, Plus, Search, Edit2, Trash2, ChevronDown, ChevronUp,
-    DollarSign, Info, Store, ChefHat, Building2, ShoppingCart, Warehouse, Database, AlertTriangle
+    DollarSign, Info, Store, ChefHat, Building2, ShoppingCart, Warehouse, Database, AlertTriangle, Copy
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,6 +27,7 @@ import { db } from '@/lib/database';
 import { empaqueDesdeFormulario, precioProveedorDesdeEmpaque, camposEmpaqueParaEditar, numeroFormulario } from '@/lib/empaque-producto';
 import { revisarPrecio, indiceRepetidos, type ProblemaPrecio } from '@/lib/precio-inconsistente';
 import { AvisoPrecio } from '@/components/precios/AvisoPrecio';
+import { buscarDuplicados, ordenarPorNombreYTamano, type GrupoDuplicado } from '@/lib/productos-duplicados';
 
 interface ProductosProps {
     productos: Producto[];
@@ -120,7 +121,30 @@ export default function Productos({
         return m;
     }, [productos, getMejorPrecio]);
 
+    // Posibles duplicados y orden por tamaño (2026-11-23): solo marca, nunca une ni borra
+    const gruposDuplicados = useMemo(() => buscarDuplicados(productos), [productos]);
+    const grupoDe = useMemo(() => {
+        const m = new Map<string, GrupoDuplicado<Producto>>();
+        for (const g of gruposDuplicados) for (const p of g.productos) m.set(p.id, g);
+        return m;
+    }, [gruposDuplicados]);
+    const [verDuplicados, setVerDuplicados] = useState(false);
+    const [grupoVisto, setGrupoVisto] = useState<GrupoDuplicado<Producto> | null>(null);
+    const [ordenLista, setOrdenLista] = useState<'nombre' | 'tamano'>('nombre');
+    const verGrupo = (g: GrupoDuplicado<Producto>) => {
+        setGrupoVisto(g); setVerDuplicados(false);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
     const filteredProductos = useMemo(() => {
+        // Viendo un grupo de posibles duplicados: solo esos productos, del más pequeño al más grande
+        if (grupoVisto) {
+            const ids = new Set(grupoVisto.productos.map(p => p.id));
+            return ordenarPorNombreYTamano(productos.filter(p => ids.has(p.id)));
+        }
+        const ordenTamano = ordenLista === 'tamano'
+            ? new Map(ordenarPorNombreYTamano(productos).map((p, i) => [p.id, i] as const))
+            : null;
         return productos.filter(p => {
             const q = searchTerm.toLowerCase().trim();
             
@@ -145,9 +169,10 @@ export default function Productos({
             const tipoA = a.tipo === 'ingrediente' ? 'ingrediente' : 'elaborado';
             const tipoB = b.tipo === 'ingrediente' ? 'ingrediente' : 'elaborado';
             if (tipoA !== tipoB) return tipoA.localeCompare(tipoB);
+            if (ordenTamano) return (ordenTamano.get(a.id) ?? 0) - (ordenTamano.get(b.id) ?? 0);
             return (a.nombre || '').localeCompare(b.nombre || '');
         });
-    }, [productos, _precios, searchTerm, filtroCategoria, filtroTipo, getProveedorById, soloRevisarPrecio, problemasPrecio]);
+    }, [productos, _precios, searchTerm, filtroCategoria, filtroTipo, getProveedorById, soloRevisarPrecio, problemasPrecio, grupoVisto, ordenLista]);
 
     const countVenta = productos.filter(p => p.tipo !== 'ingrediente').length;
     const countInsumo = productos.filter(p => p.tipo === 'ingrediente').length;
@@ -384,6 +409,7 @@ export default function Productos({
                 </div>
             </div>
 
+            <div className="flex flex-wrap gap-2">
             {/* Precios de venta para revisar (2026-11-23) */}
             {problemasPrecio.size > 0 && (
                 <button type="button" onClick={() => setSoloRevisarPrecio(v => !v)} aria-pressed={soloRevisarPrecio}
@@ -394,6 +420,61 @@ export default function Productos({
                     <AlertTriangle className="w-4 h-4" />
                     {soloRevisarPrecio ? `Viendo ${problemasPrecio.size} precios para revisar · Ver todos` : `Precios para revisar (${problemasPrecio.size})`}
                 </button>
+            )}
+            {/* Posibles duplicados (2026-11-23) */}
+            {gruposDuplicados.length > 0 && (
+                <button type="button" onClick={() => setVerDuplicados(v => !v)} aria-expanded={verDuplicados}
+                    className={cn('w-full sm:w-auto flex items-center justify-center gap-2 h-11 px-4 rounded-xl border-2 text-sm font-black transition-colors',
+                        verDuplicados
+                            ? 'bg-violet-600 border-violet-600 text-white'
+                            : 'bg-violet-50 border-violet-200 text-violet-800 dark:bg-violet-500/10 dark:border-violet-500/40 dark:text-violet-200')}>
+                    <Copy className="w-4 h-4" /> Posibles duplicados ({gruposDuplicados.length})
+                </button>
+            )}
+            {/* Orden de la lista: por nombre o por tamaño (250, 400, 1.5 l…) */}
+            <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800 w-full sm:w-auto" role="group" aria-label="Ordenar la lista">
+                <span className="px-2 text-xs font-bold text-slate-600 dark:text-slate-300">Ordenar:</span>
+                {([['nombre', 'Nombre (A-Z)'], ['tamano', 'Tamaño (menor a mayor)']] as const).map(([v, t]) => (
+                    <button key={v} type="button" onClick={() => setOrdenLista(v)} aria-pressed={ordenLista === v}
+                        className={cn('h-9 px-3 rounded-lg text-sm font-bold flex-1 sm:flex-none', ordenLista === v ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow' : 'text-slate-600 dark:text-slate-300')}>{t}</button>
+                ))}
+            </div>
+            </div>
+
+            {/* Grupo de posibles duplicados que se está viendo */}
+            {grupoVisto && (
+                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-violet-200 dark:border-violet-500/40 bg-violet-50 dark:bg-violet-500/10 px-3 py-2">
+                    <Copy className="w-4 h-4 text-violet-700 dark:text-violet-300" />
+                    <span className="text-sm font-bold text-violet-900 dark:text-violet-100">Viendo posible duplicado: {grupoVisto.texto}</span>
+                    <button type="button" onClick={() => setGrupoVisto(null)} className="ml-auto text-sm font-black underline text-violet-800 dark:text-violet-200">Ver todos</button>
+                </div>
+            )}
+
+            {/* Lista de grupos de posibles duplicados */}
+            {verDuplicados && (
+                <div className="rounded-2xl border border-violet-200 dark:border-violet-500/40 bg-white dark:bg-slate-900 p-3 space-y-2 max-h-[60vh] overflow-y-auto">
+                    <p className="text-sm text-slate-700 dark:text-slate-200">
+                        Productos que pueden ser el mismo. <b>Nada se une ni se borra solo:</b> toque «Ver» para revisarlos en la lista y corrija o borre el que sobra.
+                    </p>
+                    {gruposDuplicados.map(g => (
+                        <div key={g.clave + g.productos[0].id} className={cn('rounded-xl border p-3', g.grave ? 'border-rose-200 bg-rose-50/60 dark:border-rose-500/40 dark:bg-rose-500/10' : 'border-amber-200 bg-amber-50/60 dark:border-amber-500/40 dark:bg-amber-500/10')}>
+                            <div className="flex items-center justify-between gap-2 mb-1.5">
+                                <p className={cn('text-xs font-black', g.grave ? 'text-rose-800 dark:text-rose-200' : 'text-amber-900 dark:text-amber-200')}>{g.texto}</p>
+                                <button type="button" onClick={() => verGrupo(g)} className="shrink-0 h-8 px-3 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-black">Ver</button>
+                            </div>
+                            <ul className="space-y-0.5">
+                                {g.productos.map(p => (
+                                    <li key={p.id} className="flex items-center justify-between gap-2 text-sm">
+                                        <span className="font-semibold text-slate-800 dark:text-slate-100 truncate">{p.nombre}</span>
+                                        <span className="shrink-0 tabular-nums text-slate-700 dark:text-slate-200">
+                                            {p.tipo === 'ingrediente' ? 'Insumo · ' : ''}{Number(p.precioVenta) > 0 ? formatCurrency(Number(p.precioVenta)) : 'sin precio'}
+                                        </span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    ))}
+                </div>
             )}
 
             {/* Filtro activo de tipo */}
@@ -504,6 +585,13 @@ export default function Productos({
                                                             <span className="text-base font-bold text-slate-900 dark:text-white block">{producto.nombre}</span>
                                                             {producto.descripcion && <span className="text-sm text-slate-500 dark:text-slate-400 line-clamp-1">{producto.descripcion}</span>}
                                                             {problemasPrecio.has(producto.id) && <AvisoPrecio problemas={problemasPrecio.get(producto.id)!} className="mt-1" />}
+                                                            {grupoDe.has(producto.id) && !grupoVisto && (
+                                                                <button type="button" onClick={e => { e.stopPropagation(); verGrupo(grupoDe.get(producto.id)!); }}
+                                                                    title={grupoDe.get(producto.id)!.texto}
+                                                                    className="mt-1 ml-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold bg-violet-100 text-violet-800 dark:bg-violet-500/20 dark:text-violet-200">
+                                                                    <Copy className="w-3 h-3" /> Posible duplicado
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </td>
