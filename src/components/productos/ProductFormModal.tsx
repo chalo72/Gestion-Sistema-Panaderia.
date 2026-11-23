@@ -51,6 +51,8 @@ interface ProductFormModalProps {
     formatCurrency: (val: number) => string;
     onAddCategoria?: (nombre: string, color: string, tipo: 'venta' | 'insumo') => Promise<Categoria>;
     isSubmitting?: boolean;
+    /** Cómo se le compra hoy este producto a cada proveedor (más reciente primero). */
+    comprasProveedor?: { proveedor: string; tipo: string; cantidad: number; costo: number; fecha?: string }[];
 }
 
 const NOMBRES_CAT_SISTEMA = new Set(CATEGORIAS_DEFAULT.map((c) => c.nombre.toLowerCase().trim()));
@@ -69,7 +71,7 @@ function esCategoriaReal(cat: Categoria, nombresProductos: Set<string>): boolean
 export function ProductFormModal({
     isOpen, onOpenChange, editingProducto, categorias, productos = [], proveedores,
     formData, setFormData, onSubmit, formatCurrency, onAddCategoria,
-    isSubmitting = false
+    isSubmitting = false, comprasProveedor = []
 }: ProductFormModalProps) {
     const tipoActual = formData.tipo || 'elaborado';
 
@@ -447,6 +449,29 @@ export function ProductFormModal({
                             <Store className="w-4 h-4 text-slate-400" />
                             <span className="text-xs font-black uppercase tracking-widest text-slate-400">Proveedor y Costo</span>
                         </div>
+                        {/* Lo que está guardado de cada proveedor (2026-11-23): paca, precio y costo por unidad */}
+                        {editingProducto && (
+                            comprasProveedor.length > 0 ? (
+                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 divide-y divide-slate-100 dark:divide-slate-800">
+                                    <p className="px-3 py-2 text-xs font-bold text-slate-600 dark:text-slate-300">Así se lo compras hoy</p>
+                                    {comprasProveedor.map((c, i) => (
+                                        <div key={i} className="px-3 py-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                                            <span className="text-sm font-bold text-slate-900 dark:text-white">{c.proveedor}</span>
+                                            <span className="text-sm text-slate-800 dark:text-slate-100 tabular-nums">
+                                                {c.cantidad > 1
+                                                    ? <><b className="capitalize">{c.tipo !== 'unidad' ? c.tipo : 'paca'} x{c.cantidad}</b> a {formatCurrency(c.costo)} → <b>{formatCurrency(Math.round(c.costo / c.cantidad))}</b> c/u</>
+                                                    : <><b>Por unidad</b> a {formatCurrency(c.costo)}</>}
+                                            </span>
+                                            {c.fecha && <span className="w-full text-xs text-slate-500 dark:text-slate-400">Actualizado {new Date(c.fecha).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="rounded-lg border border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100 px-3 py-2 text-sm font-semibold">
+                                    Este producto no tiene proveedor ni costo de compra guardado. Si es un duplicado, revisa el otro antes de llenarlo.
+                                </p>
+                            )
+                        )}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {/* Proveedor */}
                             <div className="space-y-1.5">

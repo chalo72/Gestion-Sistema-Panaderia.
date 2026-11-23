@@ -646,7 +646,20 @@ export default function Productos({
                                                 </td>
                                                 <td className="px-5 py-4"><span className="text-sm font-bold px-3 py-1.5 rounded-lg" style={{ backgroundColor: `${cc}15`, color: cc }}>{producto.categoria}</span></td>
                                                 {canVerCosto && (
-                                                <td className="px-5 py-4 text-base">{cb > 0 ? <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(cb)}</span> : <span className="text-slate-300">—</span>}</td>
+                                                <td className="px-5 py-4 text-base">
+                                                    {cb > 0 ? <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(cb)}</span> : <span className="text-slate-400">—</span>}
+                                                    {/* Cómo se compra (2026-11-23): paca/unidad, precio del proveedor y a quién */}
+                                                    {mp ? (
+                                                        <span className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mt-0.5 whitespace-nowrap">
+                                                            {(mp.cantidadEmbalaje || 1) > 1
+                                                                ? <>{mp.tipoEmbalaje && mp.tipoEmbalaje !== 'unidad' ? mp.tipoEmbalaje : 'Paca'} x{mp.cantidadEmbalaje} · {formatCurrency(mp.precioCosto)}</>
+                                                                : <>Por unidad · {formatCurrency(mp.precioCosto)}</>}
+                                                            <span className="block font-normal text-slate-500 dark:text-slate-400 truncate max-w-[12rem]">{getProveedorById(mp.proveedorId)?.nombre || 'Proveedor borrado'}</span>
+                                                        </span>
+                                                    ) : (
+                                                        <span className="block text-xs font-bold text-amber-700 dark:text-amber-300 mt-0.5">Sin proveedor</span>
+                                                    )}
+                                                </td>
                                                 )}
                                                 {canVerPVP && (
                                                 <td className="px-5 py-4 text-base font-bold text-emerald-600">{pv > 0 ? formatCurrency(pv) : <span className="text-slate-300">—</span>}</td>
@@ -738,7 +751,16 @@ export default function Productos({
             <ProductFormModal isOpen={isDialogOpen} onOpenChange={setIsDialogOpen} editingProducto={editingProducto}
                 categorias={categorias} proveedores={proveedores} formData={formData} setFormData={setFormData}
                 onSubmit={handleSubmit} formatCurrency={formatCurrency} onAddCategoria={onAddCategoria}
-                isSubmitting={isSaving} />
+                isSubmitting={isSaving}
+                comprasProveedor={editingProducto ? getPreciosByProducto(editingProducto.id)
+                    .slice().sort((a, b) => String(b.fechaActualizacion || '').localeCompare(String(a.fechaActualizacion || '')))
+                    .map(pr => ({
+                        proveedor: getProveedorById(pr.proveedorId)?.nombre || 'Proveedor borrado',
+                        tipo: pr.tipoEmbalaje || 'unidad',
+                        cantidad: Number(pr.cantidadEmbalaje) || 1,
+                        costo: Number(pr.precioCosto) || 0,
+                        fecha: pr.fechaActualizacion,
+                    })) : []} />
             <ProductCategoryManager isOpen={isCategoriaDialogOpen} onOpenChange={setIsCategoriaDialogOpen}
                 categorias={categorias} onDeleteCategoria={onDeleteCategoria} onUpdateCategoria={onUpdateCategoria}
                 onAddCategoria={handleHandleAddCategoria}
