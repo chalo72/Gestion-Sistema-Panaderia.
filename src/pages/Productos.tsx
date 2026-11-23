@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useCan } from '@/contexts/AuthContext';
 import {
     Package, Plus, Search, Edit2, Trash2, ChevronDown, ChevronUp,
-    DollarSign, Info, Store, ChefHat, Building2, ShoppingCart, Warehouse, Database
+    DollarSign, Info, Store, ChefHat, Building2, ShoppingCart, Warehouse, Database, AlertTriangle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,6 +25,8 @@ import { BeverageAssistantModal } from '@/components/productos/BeverageAssistant
 import { ListaPreciosModal } from '@/components/productos/ListaPreciosModal';
 import { db } from '@/lib/database';
 import { empaqueDesdeFormulario, precioProveedorDesdeEmpaque, camposEmpaqueParaEditar, numeroFormulario } from '@/lib/empaque-producto';
+import { revisarPrecio, indiceRepetidos, type ProblemaPrecio } from '@/lib/precio-inconsistente';
+import { AvisoPrecio } from '@/components/precios/AvisoPrecio';
 
 interface ProductosProps {
     productos: Producto[];
@@ -104,6 +106,20 @@ export default function Productos({
 
     // [Nexus-Volt] Note: categorasUnicas removed - using categories from props directly
 
+    // Precios de venta para revisar (2026-11-23): mismo costo unitario que muestra la tabla
+    const [soloRevisarPrecio, setSoloRevisarPrecio] = useState(false);
+    const problemasPrecio = useMemo(() => {
+        const repetidos = indiceRepetidos(productos);
+        const m = new Map<string, ProblemaPrecio[]>();
+        for (const p of productos) {
+            const mp = getMejorPrecio(p.id);
+            const costo = Number(p.costoBase || (mp ? mp.precioCosto / (mp.cantidadEmbalaje || 1) : 0));
+            const ps = revisarPrecio(p, { costoUnitario: costo, repetidos });
+            if (ps.length) m.set(p.id, ps);
+        }
+        return m;
+    }, [productos, getMejorPrecio]);
+
     const filteredProductos = useMemo(() => {
         return productos.filter(p => {
             const q = searchTerm.toLowerCase().trim();
@@ -123,14 +139,15 @@ export default function Productos({
                 
             const matchCat = filtroCategoria === 'Todos' || p.categoria === filtroCategoria;
             const matchTipo = filtroTipo === 'todos' || (p.tipo || 'elaborado') === filtroTipo;
-            return matchSearch && matchCat && matchTipo;
+            const matchRevisar = !soloRevisarPrecio || problemasPrecio.has(p.id);
+            return matchSearch && matchCat && matchTipo && matchRevisar;
         }).sort((a, b) => {
             const tipoA = a.tipo === 'ingrediente' ? 'ingrediente' : 'elaborado';
             const tipoB = b.tipo === 'ingrediente' ? 'ingrediente' : 'elaborado';
             if (tipoA !== tipoB) return tipoA.localeCompare(tipoB);
             return (a.nombre || '').localeCompare(b.nombre || '');
         });
-    }, [productos, _precios, searchTerm, filtroCategoria, filtroTipo, getProveedorById]);
+    }, [productos, _precios, searchTerm, filtroCategoria, filtroTipo, getProveedorById, soloRevisarPrecio, problemasPrecio]);
 
     const countVenta = productos.filter(p => p.tipo !== 'ingrediente').length;
     const countInsumo = productos.filter(p => p.tipo === 'ingrediente').length;
@@ -367,6 +384,18 @@ export default function Productos({
                 </div>
             </div>
 
+            {/* Precios de venta para revisar (2026-11-23) */}
+            {problemasPrecio.size > 0 && (
+                <button type="button" onClick={() => setSoloRevisarPrecio(v => !v)} aria-pressed={soloRevisarPrecio}
+                    className={cn('w-full sm:w-auto flex items-center justify-center gap-2 h-11 px-4 rounded-xl border-2 text-sm font-black transition-colors',
+                        soloRevisarPrecio
+                            ? 'bg-rose-600 border-rose-600 text-white'
+                            : 'bg-rose-50 border-rose-200 text-rose-800 dark:bg-rose-500/10 dark:border-rose-500/40 dark:text-rose-200')}>
+                    <AlertTriangle className="w-4 h-4" />
+                    {soloRevisarPrecio ? `Viendo ${problemasPrecio.size} precios para revisar · Ver todos` : `Precios para revisar (${problemasPrecio.size})`}
+                </button>
+            )}
+
             {/* Filtro activo de tipo */}
             {filtroTipo !== 'todos' && (
                 <div className="flex items-center gap-2">
@@ -423,7 +452,8 @@ export default function Productos({
                             return <ProductCard key={producto.id} producto={producto} mejorPrecio={mp} utilidad={ut}
                                 categoriaColor={getCategoriaColor(producto.categoria)} formatCurrency={formatCurrency}
                                 onEdit={handleEdit} onDelete={handleDelete}
-                                onExpand={id => setExpandedProducto(expandedProducto === id ? null : id)} checkPermission={(p: any) => check(p)} />;
+                                onExpand={id => setExpandedProducto(expandedProducto === id ? null : id)} checkPermission={(p: any) => check(p)}
+                                problemasPrecio={problemasPrecio.get(producto.id)} />;
                         })}
                     </div>
                 ) : (
@@ -470,9 +500,10 @@ export default function Productos({
                                                                 className="w-full h-full"
                                                             />
                                                         </div>
-                                                        <div>
+                                                        <div className="min-w-0">
                                                             <span className="text-base font-bold text-slate-900 dark:text-white block">{producto.nombre}</span>
                                                             {producto.descripcion && <span className="text-sm text-slate-500 dark:text-slate-400 line-clamp-1">{producto.descripcion}</span>}
+                                                            {problemasPrecio.has(producto.id) && <AvisoPrecio problemas={problemasPrecio.get(producto.id)!} className="mt-1" />}
                                                         </div>
                                                     </div>
                                                 </td>

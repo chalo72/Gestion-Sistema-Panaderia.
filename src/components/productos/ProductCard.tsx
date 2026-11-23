@@ -5,6 +5,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { Producto, PrecioProveedor } from '@/types';
+import { AvisoPrecio } from '@/components/precios/AvisoPrecio';
+import type { ProblemaPrecio } from '@/lib/precio-inconsistente';
 
 interface ProductCardProps {
     producto: Producto;
@@ -16,6 +18,7 @@ interface ProductCardProps {
     onDelete: (id: string) => void;
     onExpand: (id: string) => void;
     checkPermission: (perm: string) => boolean;
+    problemasPrecio?: ProblemaPrecio[];
 }
 
 export function ProductCard({
@@ -27,7 +30,8 @@ export function ProductCard({
     onEdit,
     onDelete,
     onExpand,
-    checkPermission
+    checkPermission,
+    problemasPrecio = []
 }: ProductCardProps) {
     return (
         <Card
@@ -64,6 +68,7 @@ export function ProductCard({
                         <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest opacity-50 flex items-center gap-2">
                             ID: {producto.id.slice(0, 8)}
                         </p>
+                        <AvisoPrecio problemas={problemasPrecio} />
                     </div>
                     <div className="flex gap-2 sm:translate-x-4 sm:opacity-0 sm:group-hover:opacity-100 sm:group-hover:translate-x-0 transition-all duration-500">
                         {checkPermission('EDITAR_PRODUCTOS') && (
