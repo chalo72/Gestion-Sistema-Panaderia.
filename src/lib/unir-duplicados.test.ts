@@ -46,3 +46,15 @@ describe('reglas estrictas para unir duplicados (2026-11-23)', () => {
     expect(distanciaLetras('pony', 'ponny')).toBe(1);
   });
 });
+
+describe('costo verdadero = compra más reciente (2026-11-23)', () => {
+  it('toma el costo del proveedor con la fecha más nueva, aunque sea del duplicado', () => {
+    const plan = planDeUnion([
+      pv('a', 'Agua crital 600ml', { precioVenta: 4200, categoria: 'Postobón', proveedores: [{ proveedorId: 'c', proveedor: 'Carmen', costo: 2700, cantidadEmbalaje: 1, fecha: '2026-05-10' }] }),
+      pv('b', 'Agua cristal 600 *24', { categoria: 'Postobón', proveedores: [{ proveedorId: 'p', proveedor: 'Postobón', costo: 29999, cantidadEmbalaje: 1, fecha: '2026-11-20' }] }),
+    ], ['Postobón']);
+    expect(plan.resultado.costoFuente).toMatchObject({ proveedor: 'Postobón', fecha: '2026-11-20', cantidadEmbalaje: 24 });
+    expect(plan.resultado.costoUnitario).toBe(1250);
+    expect(plan.resultado.precioVenta).toBe(4200);
+  });
+});

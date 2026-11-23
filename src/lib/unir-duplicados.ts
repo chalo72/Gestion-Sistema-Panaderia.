@@ -14,7 +14,7 @@ import { analizarNombre, buscarDuplicados, type InfoNombre } from './productos-d
 
 export type Nivel = 'seguro' | 'dudoso';
 
-export interface ProveedorDeProducto { proveedorId: string; proveedor?: string; costo: number; cantidadEmbalaje: number }
+export interface ProveedorDeProducto { proveedorId: string; proveedor?: string; costo: number; cantidadEmbalaje: number; fecha?: string }
 
 export interface ProductoUnion {
   id: string;
@@ -38,6 +38,8 @@ export interface PlanUnion {
     precioVenta: number;
     precioVentaCompletado: boolean; // true si el principal no tenía precio y se tomó de otro
     costoUnitario: number;
+    /** De dónde sale el costo: la compra MÁS RECIENTE de cualquier proveedor del grupo. */
+    costoFuente: { proveedor: string; fecha: string; producto: string; costoCompra: number; cantidadEmbalaje: number } | null;
     stock: number;
     stockConvertido: boolean;       // hubo paca → unidades
     categoria: string;
@@ -130,7 +132,22 @@ export function planDeUnion(grupo: ProductoUnion[], categoriasExistentes: string
   const ip = analizarNombre(principal.nombre);
   const conPrecio = unidos.find(u => u.precioVenta > 0);
   const precioVenta = principal.precioVenta > 0 ? principal.precioVenta : (conPrecio?.precioVenta || 0);
-  const costoUnitarioFinal = costoUnitario(principal, ip) || unidos.map(u => costoUnitario(u)).find(c => c > 0) || 0;
+  // El costo que vale es el de la COMPRA MÁS RECIENTE (fecha del precio del proveedor) en todo el grupo.
+  // Si nadie tiene fecha, el del principal; si no tiene, el primero de los otros.
+  let costoFuente: PlanUnion[resultado][costoFuente] = null;
+  for (const p of [principal, ...unidos]) {
+    const ipp = analizarNombre(p.nombre);
+    for (const pr of p.proveedores || []) {
+      if (!(pr.costo > 0) || !pr.fecha) continue;
+      if (!costoFuente || pr.fecha > costoFuente.fecha) {
+        const cant = (pr.cantidadEmbalaje || 1) > 1 ? pr.cantidadEmbalaje : (ipp.paca || 1);
+        costoFuente = { proveedor: pr.proveedor || pr.proveedorId, fecha: pr.fecha, producto: p.nombre.trim(), costoCompra: pr.costo, cantidadEmbalaje: cant };
+      }
+    }
+  }
+  const costoUnitarioFinal = costoFuente
+    ? costoFuente.costoCompra / (costoFuente.cantidadEmbalaje || 1)
+    : (costoUnitario(principal, ip) || unidos.map(u => costoUnitario(u)).find(c => c > 0) || 0);
 
   let stock = Number(principal.stock) || 0;
   let stockConvertido = false;
@@ -162,6 +179,7 @@ export function planDeUnion(grupo: ProductoUnion[], categoriasExistentes: string
       precioVenta,
       precioVentaCompletado: principal.precioVenta <= 0 && precioVenta > 0,
       costoUnitario: Math.round(costoUnitarioFinal),
+      costoFuente,
       stock,
       stockConvertido,
       categoria,
