@@ -277,7 +277,6 @@ export function Proveedores({
   onAddProducto,
   onAddOrUpdatePrecio,
   onDeletePrecio,
-  onDeleteProducto,
   getPreciosByProveedor,
   getProductoById,
   formatCurrency,
@@ -582,7 +581,7 @@ export function Proveedores({
   };
 
   /* ─── Formulario ─── */
-  const handleSubmit = async (data: any, items: ProductoCatalogo[]) => {
+  const handleSubmit = async (data: any, items: ProductoCatalogo[], uidsQuitados: string[] = []) => {
     // 🛡️ GUARD: verificar que las funciones críticas están conectadas antes de intentar guardar
     if (!onAddProducto || !onAddOrUpdatePrecio || !onUpdateProducto) {
       console.error('[Proveedores] GUARD ACTIVADO — props de guardado no conectadas:', {
@@ -646,25 +645,18 @@ export function Proveedores({
         toast.success('Proveedor creado');
       }
 
-      // Eliminar precios que el usuario quitó del catálogo
-      if (editingProveedor && onDeletePrecio) {
-        const preciosOriginales = getPreciosByProveedor(editingProveedor.id);
-        const uidsActuales = new Set(items.map(i => i.uid));
-        const preciosAEliminar = preciosOriginales.filter(p => !uidsActuales.has(p.id));
-        const idsAEliminar = new Set(preciosAEliminar.map(p => p.id));
+      // Quitar del catálogo SOLO las filas que el usuario quitó a mano con la X (2026-11-23).
+      // Antes se borraba todo precio que no estuviera en la tabla y, si el producto quedaba sin
+      // proveedor, el PRODUCTO también: un catálogo que abrió vacío o un borrador viejo borraba
+      // los productos reales del proveedor (caso Colanta). El producto ya no se borra nunca aquí:
+      // si se quiere eliminar, se hace en Productos.
+      if (editingProveedor && onDeletePrecio && uidsQuitados.length > 0) {
+        const quitados = new Set(uidsQuitados);
+        const sigueEnTabla = new Set(items.map(i => i.uid));
+        const preciosAEliminar = getPreciosByProveedor(editingProveedor.id)
+          .filter(p => quitados.has(p.id) && !sigueEnTabla.has(p.id));
         for (const precio of preciosAEliminar) {
           await onDeletePrecio(precio.id);
-        }
-        // Eliminar el producto si quedó sin ningún proveedor que lo venda
-        if (onDeleteProducto) {
-          for (const precio of preciosAEliminar) {
-            const otrosPrecios = precios.filter(
-              p => p.productoId === precio.productoId && !idsAEliminar.has(p.id)
-            );
-            if (otrosPrecios.length === 0) {
-              await onDeleteProducto(precio.productoId);
-            }
-          }
         }
       }
 

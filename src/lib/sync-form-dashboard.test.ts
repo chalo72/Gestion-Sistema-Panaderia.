@@ -75,7 +75,14 @@ describe('CAPA 1: ProveedorForm — datos completos en ProductoCatalogo', () => 
 
   it('handleSave llama onSubmit con formData e items guardados', () => {
     // itemsParaGuardar puede incluir el ítem pendiente del formulario
-    expect(proveedorFormSrc).toContain('await onSubmit(formData, itemsParaGuardar)');
+    // 2026-11-23: también manda las filas quitadas a mano (solo esas se borran al guardar)
+    expect(proveedorFormSrc).toContain('await onSubmit(formData, itemsParaGuardar, uidsQuitados)');
+  });
+
+  it('guardar un proveedor no borra lo que no se ve en la tabla ni borra productos (caso Colanta)', () => {
+    const provSrc = proveedoresPageSrc;
+    expect(provSrc).toContain('quitados.has(p.id)');
+    expect(provSrc).not.toContain('await onDeleteProducto(precio.productoId)');
   });
 });
 
