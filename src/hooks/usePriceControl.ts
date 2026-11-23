@@ -291,7 +291,14 @@ export function usePriceControl() {
           const usado = usadoPorNormal.get(normalizar(c.nombre));
           return usado && usado !== c.nombre && !nombresCatUsados.has(c.nombre) ? { ...c, nombre: usado } : c;
         });
-        await db.saveConfiguracion({ ...finalConfig, id: 'main' });
+        // ⛔ Solo guardar si al cargar cambió algo de verdad (2026-11-23, AUTORIZO de Gonzalo).
+        // saveConfiguracion pone la hora actual y la nube se queda con la copia más nueva: guardar
+        // en CADA carga hacía que el último aparato en abrir la app impusiera su lista vieja de
+        // categorías (reaparecían las borradas y se perdían las nuevas, p. ej. «Colanta»).
+        const cambioAlCargar = !config
+          || JSON.stringify(config.categorias || []) !== JSON.stringify(finalConfig.categorias)
+          || config.pesoArrobaKg !== finalConfig.pesoArrobaKg;
+        if (cambioAlCargar) await db.saveConfiguracion({ ...finalConfig, id: 'main' });
 
         setConfiguracion(finalConfig);
         setProductos(prodsFinal.sort((a, b) => a.nombre.localeCompare(b.nombre)));
