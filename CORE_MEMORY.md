@@ -89,6 +89,7 @@ El 2026-09-15, tras publicar `app/` a producción (arreglando el bug de `Megapho
 ## 📜 Reglas Inquebrantables
 - **Seguridad**: RLS (Row Level Security) activo en Supabase.
 - **Sincronización**: Siempre intentar descargar datos de la nube tras un login exitoso; local siempre gana sobre nube en conflicto.
+- **🛡️ Guardián de datos de Gonzalo (2026-11-23)**: lo que el usuario corrige NO se deshace. (1) El catálogo de proveedores ACTUALIZA, nunca duplica: usar `productoExistenteDeFila` (src/lib/guardian-catalogo.ts) antes de cualquier `onAddProducto`; renombrar una fila = renombrar ese producto. (2) Nunca bajar a 1 la cantidad por paca de un precio guardado (`cantidadQueSeGuarda`). (3) Lo borrado no revive: lápida en la nube sin edición posterior = borrado (`borradoSegunNube`, src/lib/lapidas-nube.ts, usado en useRealtimeSync). Cualquier agente que toque guardado/sync debe respetar estas 3 reglas y sus tests.
 - **Integridad**: No usar contenido truncado (`[truncated]`) para reescribir archivos.
 - **Archivos protegidos**: requieren "AUTORIZO" explícito del usuario antes de editar — ver lista en `CLAUDE.md` (`App.tsx`, `AuthContext.tsx`, `usePriceControl.ts`, `database.ts`, `supabase-db.ts`, configs de build).
 - **Flujo Vercel-First** (histórico): cambios de funciones/UI se desplegaban y verificaban primero en Vercel (`https://app-eight-sigma-13.vercel.app/`) y luego se consolidaban local — confirmar si sigue vigente antes de asumirlo.

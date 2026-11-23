@@ -1227,7 +1227,9 @@ export function ProveedorForm({
                               value={buscarProd}
                               onChange={e => { 
                                 setBuscarProd(e.target.value); 
-                                setProdActual(prev => ({ ...prev, nombre: e.target.value, productoId: '' })); 
+                                // 🛡️ 2026-11-23: al editar una fila que ya estaba, cambiarle el nombre es RENOMBRAR
+                                // ese producto (no crear otro). Solo una fila nueva suelta el producto elegido.
+                                setProdActual(prev => ({ ...prev, nombre: e.target.value, productoId: editingUid ? prev.productoId : '' })); 
                                 setShowDropdown(true);
                                 setIsCategoriaIA(false); 
                               }}
