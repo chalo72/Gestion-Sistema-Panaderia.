@@ -196,7 +196,8 @@ const PROD_INIT: Omit<ProductoCatalogo, 'uid' | 'costoUnitario' | 'precioVenta' 
 interface ProveedorFormProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (provData: any, catalogo: ProductoCatalogo[]) => Promise<void>;
+  /** uidsQuitados = filas que el usuario quitó a mano con la X (solo esas se borran al guardar). */
+  onSubmit: (provData: any, catalogo: ProductoCatalogo[], uidsQuitados: string[]) => Promise<void>;
   editingProveedor: Proveedor | null;
   productosExistentes: Producto[];
   initialCatalogo: ProductoCatalogo[];
@@ -231,6 +232,10 @@ export function ProveedorForm({
   });
 
   const [catalogoItems, setCatalogoItems] = useState<ProductoCatalogo[]>([]);
+  // Filas quitadas a mano en esta edición (2026-11-23): al guardar SOLO se borran estas.
+  // Antes se borraba todo lo que no se veía en la tabla, y un catálogo vacío o un borrador
+  // viejo borraba los productos reales del proveedor (caso Colanta).
+  const [uidsQuitados, setUidsQuitados] = useState<string[]>([]);
   // Precios de venta para revisar en el catálogo (2026-11-23): se usa el precio que de verdad cobra
   // la app (el del producto) si ya existe; si no, el que trae el catálogo.
   const problemasCatalogo = useMemo(() => {
@@ -293,6 +298,7 @@ export function ProveedorForm({
   // Inicialización y recuperación de borrador al abrir
   useEffect(() => {
     if (isOpen) {
+      setUidsQuitados([]);
       let draftRestored = false;
       const raw = localStorage.getItem(draftKey);
       
@@ -314,7 +320,18 @@ export function ProveedorForm({
               !item.productoId || productIdsValidos.has(item.productoId)
             );
             setFormData(fd);
-            setCatalogoItems(ciValidos);
+            // Al editar, el borrador SE SUMA al catálogo real (nunca lo reemplaza): se toman las filas
+            // reales (con lo editado en el borrador si es la misma fila) y se agregan las nuevas del borrador.
+            if (editingProveedor) {
+              const reales = initialCatalogo || [];
+              const porUid = new Map(ciValidos.map(i => [i.uid, i] as const));
+              const uidsReales = new Set(reales.map(r => r.uid));
+              const idsReales = new Set(reales.map(r => r.productoId).filter(Boolean));
+              const nuevos = ciValidos.filter(i => !uidsReales.has(i.uid) && (!i.productoId || !idsReales.has(i.productoId)));
+              setCatalogoItems([...reales.map(r => porUid.get(r.uid) ?? r), ...nuevos]);
+            } else {
+              setCatalogoItems(ciValidos);
+            }
             const eliminados = ci.length - ciValidos.length;
             toast.info(
               eliminados > 0
@@ -371,7 +388,12 @@ export function ProveedorForm({
       if (!raw) return;
       const { formData: fd, catalogoItems: ci } = JSON.parse(raw);
       setFormData(fd);
-      setCatalogoItems(ci);
+      // Se suma a lo que ya hay en la tabla (no lo reemplaza)
+      setCatalogoItems(prev => {
+        const uids = new Set(prev.map(p => p.uid));
+        const ids = new Set(prev.map(p => p.productoId).filter(Boolean));
+        return [...prev, ...(ci as ProductoCatalogo[]).filter(i => !uids.has(i.uid) && (!i.productoId || !ids.has(i.productoId)))];
+      });
       setHayBorrador(false);
       toast.success(`Borrador restaurado — ${ci.length} producto(s) recuperado(s)`);
     } catch {
@@ -462,7 +484,7 @@ export function ProveedorForm({
 
     setGuardando(true);
     try {
-      await onSubmit(formData, itemsParaGuardar);
+      await onSubmit(formData, itemsParaGuardar, uidsQuitados);
       limpiarBorrador();
       onClose();
     } catch (err) {
@@ -1613,7 +1635,7 @@ export function ProveedorForm({
                               item={item} 
                               isEditing={editingUid === item.uid}
                               onEdit={() => handleEditItem(item)}
-                              onDelete={() => setCatalogoItems(prev => prev.filter(i => i.uid !== item.uid))}
+                              onDelete={() => { setCatalogoItems(prev => prev.filter(i => i.uid !== item.uid)); setUidsQuitados(prev => [...prev, item.uid]); }}
                               formatCurrency={formatCurrency}
                               embalajes={EMBALAJES}
                               problemas={problemasCatalogo.get(item.uid)}
