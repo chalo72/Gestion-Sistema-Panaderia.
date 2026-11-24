@@ -51,6 +51,8 @@ interface ProductFormModalProps {
     formatCurrency: (val: number) => string;
     onAddCategoria?: (nombre: string, color: string, tipo: 'venta' | 'insumo') => Promise<Categoria>;
     isSubmitting?: boolean;
+    /** Si viene, el formulario muestra «Eliminar producto» (2026-11-23). */
+    onDelete?: () => void;
     /** Cómo se le compra hoy este producto a cada proveedor (más reciente primero). */
     comprasProveedor?: { proveedor: string; tipo: string; cantidad: number; costo: number; fecha?: string }[];
     /** Cambios de costo guardados (más reciente primero). */
@@ -73,7 +75,7 @@ function esCategoriaReal(cat: Categoria, nombresProductos: Set<string>): boolean
 export function ProductFormModal({
     isOpen, onOpenChange, editingProducto, categorias, productos = [], proveedores,
     formData, setFormData, onSubmit, formatCurrency, onAddCategoria,
-    isSubmitting = false, comprasProveedor = [], historialPrecios = []
+    isSubmitting = false, onDelete, comprasProveedor = [], historialPrecios = []
 }: ProductFormModalProps) {
     const tipoActual = formData.tipo || 'elaborado';
 
@@ -734,6 +736,25 @@ export function ProductFormModal({
                                 </div>
                             )}
                             
+                            {/* Rentabilidad real por unidad (2026-11-23): mismos colores que la lista */}
+                            {(() => {
+                                const costoU = Number(formData.precioCosto) || 0;
+                                const pvU = Number(formData.precioVenta) || 0;
+                                if (!(costoU > 0) || !(pvU > 0)) return null;
+                                const ganancia = pvU - costoU;
+                                const pct = (ganancia / pvU) * 100;
+                                const nivel = pct >= 30 ? 'verde' : pct >= 15 ? 'amarillo' : 'rojo';
+                                return (
+                                    <div className={cn('rounded-lg border px-3 py-2 text-sm',
+                                        nivel === 'verde' ? 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-100'
+                                        : nivel === 'amarillo' ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100'
+                                        : 'border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100')}>
+                                        <p className="font-black">Rentabilidad: {pct.toFixed(1)}% · ganas {formatCurrency(Math.round(ganancia))} por unidad</p>
+                                        <p className="text-xs mt-0.5">Vendes a {formatCurrency(pvU)} y te cuesta {formatCurrency(Math.round(costoU))}. Verde: 30% o más · Amarillo: 15% a 30% · Rojo: menos de 15% (o pierdes).</p>
+                                    </div>
+                                );
+                            })()}
+
                             <div className="grid grid-cols-2 gap-4">
                                 {/* Descuento Mayorista */}
                                 <div className="space-y-1.5">
@@ -973,6 +994,12 @@ export function ProductFormModal({
                     </div>
 
                     {/* ── BOTONES ── */}
+                    {editingProducto && onDelete && (
+                        <Button type="button" variant="outline" onClick={onDelete}
+                            className="w-full h-11 rounded-xl text-sm font-bold border-rose-200 text-rose-700 hover:bg-rose-50 dark:border-rose-500/40 dark:text-rose-300">
+                            Eliminar producto
+                        </Button>
+                    )}
                     <div className="flex gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
                         <Button
                             type="button" variant="outline"
