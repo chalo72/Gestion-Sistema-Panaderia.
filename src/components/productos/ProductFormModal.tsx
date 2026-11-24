@@ -446,6 +446,9 @@ export function ProductFormModal({
                                                     ? <><b className="capitalize">{c.tipo !== 'unidad' ? c.tipo : 'paca'} x{c.cantidad}</b> a {formatCurrency(c.costo)} → <b>{formatCurrency(Math.round(c.costo / c.cantidad))}</b> c/u</>
                                                     : <><b>Por unidad</b> a {formatCurrency(c.costo)}</>}
                                             </span>
+                                            {c.cantidad <= 1 && Number(formData.precioVenta) > 0 && c.costo >= Number(formData.precioVenta) * 3 && (
+                                                <span className="w-full text-xs font-bold text-amber-800 dark:text-amber-200">⚠️ Pendiente: ese valor es de una paca. Cuando sepas cuántas trae, elige «Paca» abajo y escríbelo.</span>
+                                            )}
                                             {c.fecha && <span className="w-full text-xs text-slate-500 dark:text-slate-400">Actualizado {new Date(c.fecha).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
                                         </div>
                                     ))}
