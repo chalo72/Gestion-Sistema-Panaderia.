@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { CATEGORIAS_DEFAULT } from '@/lib/seed-data';
+import { esCategoriaDeReceta } from '@/lib/limpiar-categorias';
 import { TIPOS_EMPAQUE, empaqueDesdeFormulario, precioVentaConMargen } from '@/lib/empaque-producto';
 import type { Categoria, Proveedor, Producto } from '@/types';
 import { InputPesos } from '@/components/ui/input-pesos';
@@ -59,57 +59,30 @@ interface ProductFormModalProps {
     historialPrecios?: { proveedor: string; antes: number; despues: number; fecha: string }[];
 }
 
-const NOMBRES_CAT_SISTEMA = new Set(CATEGORIAS_DEFAULT.map((c) => c.nombre.toLowerCase().trim()));
-
-/** Detecta basura: categoría = nombre de producto (importaciones / sync huérfano). */
-function esCategoriaReal(cat: Categoria, nombresProductos: Set<string>): boolean {
-    const n = (cat.nombre || '').toLowerCase().trim();
-    if (!n) return false;
-    if (NOMBRES_CAT_SISTEMA.has(n)) return true;
-    if (nombresProductos.has(n)) return false;
-    // Heurística: nombres de producto suelen traer precios, paréntesis o ser muy largos
-    if (/\(\d|\d{3,}/.test(cat.nombre) || cat.nombre.length > 45) return false;
-    return true;
-}
-
 export function ProductFormModal({
-    isOpen, onOpenChange, editingProducto, categorias, productos = [], proveedores,
+    isOpen, onOpenChange, editingProducto, categorias, proveedores,
     formData, setFormData, onSubmit, formatCurrency, onAddCategoria,
     isSubmitting = false, onDelete, comprasProveedor = [], historialPrecios = []
 }: ProductFormModalProps) {
     const tipoActual = formData.tipo || 'elaborado';
 
+    // 2026-11-23: TODAS las categorías que creó el usuario (antes se escondían las del otro tipo
+    // y, si había pocas, se metían las de fábrica). Primero las del tipo del producto, luego el resto.
+    // Solo se quitan registros de receta guardados por error como categoría.
     const categoriasParaSelect = useMemo(() => {
-        const nombresProd = new Set(
-            (productos || []).map((p) => (p.nombre || '').toLowerCase().trim()).filter(Boolean)
-        );
-        const limpias = categorias.filter((c) => esCategoriaReal(c, nombresProd));
-        // Si hay contaminación masiva, priorizar sistema + las limpias
-        const base =
-            limpias.length >= 3
-                ? limpias
-                : [
-                      ...CATEGORIAS_DEFAULT,
-                      ...limpias.filter((c) => !NOMBRES_CAT_SISTEMA.has(c.nombre.toLowerCase().trim())),
-                  ];
         const quiereInsumo = tipoActual === 'ingrediente';
-        const filtradas = base.filter((c) => {
-            if (!c.tipo) return true;
-            if (quiereInsumo) return c.tipo === 'insumo' || c.nombre.toUpperCase().startsWith('INS:');
-            return c.tipo === 'venta';
-        });
-        // Si el filtro por tipo deja vacío, mostrar todas las limpias
-        const lista = (filtradas.length > 0 ? filtradas : base).slice();
-        lista.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
-        // Deduplicar por nombre
+        const esDeInsumo = (c: Categoria) => c.tipo === 'insumo' || /^ins\b|^ins:/i.test((c.nombre || '').trim());
         const seen = new Set<string>();
-        return lista.filter((c) => {
+        const todas = (categorias || []).filter((c) => {
+            if (!c?.nombre?.trim() || esCategoriaDeReceta(c)) return false;
             const k = c.nombre.toLowerCase().trim();
             if (seen.has(k)) return false;
             seen.add(k);
             return true;
-        });
-    }, [categorias, productos, tipoActual]);
+        }).map((c) => ({ ...c, delTipo: esDeInsumo(c) === quiereInsumo }));
+        todas.sort((a, b) => (Number(b.delTipo) - Number(a.delTipo)) || a.nombre.localeCompare(b.nombre, 'es'));
+        return todas;
+    }, [categorias, tipoActual]);
 
     // Estado mini-formulario de nueva categoría inline
     const [showNueva,    setShowNueva]    = useState(false);
@@ -343,14 +316,21 @@ export function ProductFormModal({
                                                 </div>
                                             </SelectItem>
                                         )}
-                                        {categoriasParaSelect.map(c => (
-                                            <SelectItem key={c.id} value={c.nombre} className="text-sm">
+                                        {categoriasParaSelect.map((c, i) => (
+                                            <React.Fragment key={c.id || c.nombre}>
+                                            {(i === 0 || categoriasParaSelect[i - 1].delTipo !== c.delTipo) && (
+                                                <div className="px-2 pt-2 pb-1 text-[11px] font-black uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                                                    {c.delTipo ? (tipoActual === 'ingrediente' ? '📦 Insumos' : '🛒 Para venta') : 'Otras categorías'}
+                                                </div>
+                                            )}
+                                            <SelectItem value={c.nombre} className="text-sm">
                                                 <div className="flex items-center gap-2">
                                                     <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: c.color }} />
                                                     {c.icono ? <span className="text-xs">{c.icono}</span> : null}
                                                     {c.nombre}
                                                 </div>
                                             </SelectItem>
+                                            </React.Fragment>
                                         ))}
                                     </SelectContent>
                                 </Select>
