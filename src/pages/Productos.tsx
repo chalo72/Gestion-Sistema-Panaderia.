@@ -30,6 +30,7 @@ import { empaqueDesdeFormulario, precioProveedorDesdeEmpaque, camposEmpaqueParaE
 import { revisarPrecio, indiceRepetidos, type ProblemaPrecio } from '@/lib/precio-inconsistente';
 import { AvisoPrecio } from '@/components/precios/AvisoPrecio';
 import { buscarDuplicados, ordenarPorNombreYTamano, type GrupoDuplicado } from '@/lib/productos-duplicados';
+import { tipoDeDuplicado } from '@/lib/duplicado-por-proveedor';
 
 interface ProductosProps {
     productos: Producto[];
@@ -506,26 +507,52 @@ export default function Productos({
             {verDuplicados && (
                 <div className="rounded-2xl border border-violet-200 dark:border-violet-500/40 bg-white dark:bg-slate-900 p-3 space-y-2 max-h-[60vh] overflow-y-auto">
                     <p className="text-sm text-slate-700 dark:text-slate-200">
-                        Productos que pueden ser el mismo. <b>Nada se une ni se borra solo:</b> toque «Ver» para revisarlos en la lista y corrija o borre el que sobra.
+                        Productos con nombre parecido. <b>Mira el proveedor antes de borrar:</b> si son de proveedores distintos, cada uno tiene su precio y <b>no se borra</b>. Nada se une ni se borra solo.
                     </p>
-                    {gruposDuplicados.map(g => (
-                        <div key={g.clave + g.productos[0].id} className={cn('rounded-xl border p-3', g.grave ? 'border-rose-200 bg-rose-50/60 dark:border-rose-500/40 dark:bg-rose-500/10' : 'border-amber-200 bg-amber-50/60 dark:border-amber-500/40 dark:bg-amber-500/10')}>
+                    {gruposDuplicados.map(g => {
+                        // De qué proveedor es cada uno (2026-11-23)
+                        const provsDe = (id: string) => getPreciosByProducto(id).map(pr => ({
+                            nombre: getProveedorById(pr.proveedorId)?.nombre || 'Proveedor borrado',
+                            texto: (pr.cantidadEmbalaje || 1) > 1
+                                ? `${pr.tipoEmbalaje && pr.tipoEmbalaje !== 'unidad' ? pr.tipoEmbalaje : 'paca'} x${pr.cantidadEmbalaje} a ${formatCurrency(pr.precioCosto)}`
+                                : `unidad a ${formatCurrency(pr.precioCosto)}`,
+                        }));
+                        const tipo = tipoDeDuplicado(g.productos.map(p => provsDe(p.id).map(x => x.nombre)));
+                        const aviso = tipo === 'mismo-proveedor'
+                            ? { t: '🔴 Mismo proveedor: es copia, deja uno solo', c: 'border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100' }
+                            : tipo === 'sin-proveedor'
+                                ? { t: '🟡 Uno no tiene proveedor: ese suele ser la copia', c: 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100' }
+                                : { t: '🔵 Proveedores distintos: NO borrar, cada uno tiene su precio', c: 'border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-100' };
+                        return (
+                        <div key={g.clave + g.productos[0].id} className={cn('rounded-xl border-2 p-3', aviso.c)}>
                             <div className="flex items-center justify-between gap-2 mb-1.5">
-                                <p className={cn('text-xs font-black', g.grave ? 'text-rose-800 dark:text-rose-200' : 'text-amber-900 dark:text-amber-200')}>{g.texto}</p>
+                                <div className="min-w-0">
+                                    <p className="text-sm font-black">{aviso.t}</p>
+                                    <p className="text-xs opacity-90">{g.texto}</p>
+                                </div>
                                 <button type="button" onClick={() => verGrupo(g)} className="shrink-0 h-8 px-3 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-black">Ver</button>
                             </div>
-                            <ul className="space-y-0.5">
-                                {g.productos.map(p => (
-                                    <li key={p.id} className="flex items-center justify-between gap-2 text-sm">
-                                        <span className="font-semibold text-slate-800 dark:text-slate-100 truncate">{p.nombre}</span>
-                                        <span className="shrink-0 tabular-nums text-slate-700 dark:text-slate-200">
-                                            {p.tipo === 'ingrediente' ? 'Insumo · ' : ''}{Number(p.precioVenta) > 0 ? formatCurrency(Number(p.precioVenta)) : 'sin precio'}
-                                        </span>
+                            <ul className="space-y-1.5">
+                                {g.productos.map(p => {
+                                    const provs = provsDe(p.id);
+                                    return (
+                                    <li key={p.id} className="rounded-lg bg-white/80 dark:bg-slate-900/60 px-2 py-1.5 text-sm text-slate-800 dark:text-slate-100">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <span className="font-semibold truncate">{p.nombre}</span>
+                                            <span className="shrink-0 tabular-nums font-bold">
+                                                {p.tipo === 'ingrediente' ? 'Insumo · ' : ''}{Number(p.precioVenta) > 0 ? formatCurrency(Number(p.precioVenta)) : 'sin precio'}
+                                            </span>
+                                        </div>
+                                        {provs.length > 0
+                                            ? provs.map((x, i) => <p key={i} className="text-xs text-slate-700 dark:text-slate-300">🏪 <b>{x.nombre}</b> · {x.texto}</p>)
+                                            : <p className="text-xs font-bold text-amber-800 dark:text-amber-200">Sin proveedor</p>}
                                     </li>
-                                ))}
+                                    );
+                                })}
                             </ul>
                         </div>
-                    ))}
+                        );
+                    })}
                 </div>
             )}
 
