@@ -718,6 +718,10 @@ export default function Productos({
                                                             {(mp.cantidadEmbalaje || 1) > 1
                                                                 ? <>{mp.tipoEmbalaje && mp.tipoEmbalaje !== 'unidad' ? mp.tipoEmbalaje : 'Paca'} x{mp.cantidadEmbalaje} · {formatCurrency(mp.precioCosto)}</>
                                                                 : <>Por unidad · {formatCurrency(mp.precioCosto)}</>}
+                                                            {/* 2026-11-23: costo de paca guardado como «1 unidad» → falta cuántas trae */}
+                                                            {(mp.cantidadEmbalaje || 1) <= 1 && pv > 0 && mp.precioCosto >= pv * 3 && (
+                                                                <span className="block mt-0.5 w-fit rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-black text-amber-900 dark:bg-amber-500/20 dark:text-amber-100">⚠️ Pendiente: cuántas trae la paca</span>
+                                                            )}
                                                             <span className="block font-normal text-slate-500 dark:text-slate-400 truncate max-w-[12rem]">{getProveedorById(mp.proveedorId)?.nombre || 'Proveedor borrado'}</span>
                                                         </span>
                                                     ) : (

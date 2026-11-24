@@ -626,8 +626,16 @@ export function useRealtimeSync() {
         const lista = key ? remotos.get(key) : undefined;
         return lista === undefined ? true : lista.some((r: any) => r?.id === t.item_id);
       };
+      // 🛡️ 2026-11-23: si en la nube lo RESTAURARON después de borrarlo aquí (está otra vez y con
+      // fecha más nueva que el borrado), no se vuelve a borrar: el paso 4 lo trae de vuelta.
+      const restauradoEnNube = (t: any) => {
+        const key = Object.keys(HANDLERS).find(k => HANDLERS[k].localTableName === t.table);
+        const remoto = key ? (remotos.get(key) ?? []).find((r: any) => r?.id === t.item_id) : undefined;
+        const fechaBorrado = new Date(t.fecha ?? 0).getTime() || 0;
+        return !!remoto && fechaBorrado > 0 && timestampDeDoc(remoto) > fechaBorrado;
+      };
       const pendientes = tumbas.filter((t: any) =>
-        t?.item_id && (!tumbasNube.has(`${t.table}:${t.item_id}`) || sigueEnNube(t)));
+        t?.item_id && !restauradoEnNube(t) && (!tumbasNube.has(`${t.table}:${t.item_id}`) || sigueEnNube(t)));
       await Promise.all(pendientes.map(async (t: any) => {
         if (!tumbasNube.has(`${t.table}:${t.item_id}`)) await supabaseDB.addTombstone(t.table, t.item_id).catch(() => {});
         if (!sigueEnNube(t)) return;
