@@ -5,6 +5,7 @@ import {
     DollarSign, Info, Store, ChefHat, Building2, ShoppingCart, Warehouse, Database, AlertTriangle, Copy
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -335,8 +336,24 @@ export default function Productos({
         setIsDialogOpen(true);
     };
 
+    // 2026-11-23: confirm() del navegador no sale en el celular (PWA) y el botón no hacía nada.
+    // Ahora la confirmación es dentro de la app.
+    const [porEliminar, setPorEliminar] = useState<Producto | null>(null);
     const handleDelete = (id: string) => {
-        if (confirm('¿Eliminar este producto?')) { onDeleteProducto(id); toast.success('Producto eliminado'); }
+        const p = productos.find(x => x.id === id);
+        if (p) setPorEliminar(p);
+    };
+    const confirmarEliminar = async () => {
+        if (!porEliminar) return;
+        const nombre = porEliminar.nombre;
+        try {
+            await onDeleteProducto(porEliminar.id);
+            toast.success(`«${nombre}» eliminado`);
+            if (editingProducto?.id === porEliminar.id) { setIsDialogOpen(false); setEditingProducto(null); }
+        } catch {
+            toast.error('No se pudo eliminar. Intenta de nuevo.');
+        }
+        setPorEliminar(null);
     };
 
     const handleAgregarPrecio = (productoId: string) => {
@@ -781,7 +798,21 @@ export default function Productos({
                         costo: Number(pr.precioCosto) || 0,
                         fecha: pr.fechaActualizacion,
                     })) : []}
-                historialPrecios={historialEditado} />
+                historialPrecios={historialEditado}
+                onDelete={editingProducto && check('ELIMINAR_PRODUCTOS') ? () => handleDelete(editingProducto.id) : undefined} />
+            {/* Confirmar eliminar (2026-11-23) */}
+            <Dialog open={!!porEliminar} onOpenChange={o => { if (!o) setPorEliminar(null); }}>
+                <DialogContent className="max-w-sm rounded-2xl">
+                    <DialogTitle className="text-lg font-black">¿Eliminar este producto?</DialogTitle>
+                    <DialogDescription className="text-base text-slate-700 dark:text-slate-200">
+                        <b>{porEliminar?.nombre}</b> se quita de la lista, de los catálogos de proveedores y de todos los aparatos. No vuelve a aparecer.
+                    </DialogDescription>
+                    <div className="flex gap-3 pt-2">
+                        <Button type="button" variant="outline" className="h-12 flex-1 rounded-xl text-base font-semibold" onClick={() => setPorEliminar(null)}>Cancelar</Button>
+                        <Button type="button" className="h-12 flex-1 rounded-xl text-base font-black bg-rose-600 hover:bg-rose-700 text-white" onClick={confirmarEliminar}>Sí, eliminar</Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
             <ProductCategoryManager isOpen={isCategoriaDialogOpen} onOpenChange={setIsCategoriaDialogOpen}
                 categorias={categorias} onDeleteCategoria={onDeleteCategoria} onUpdateCategoria={onUpdateCategoria}
                 onAddCategoria={handleHandleAddCategoria}
